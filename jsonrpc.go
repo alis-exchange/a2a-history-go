@@ -11,18 +11,19 @@ import (
 
 // JSON-RPC 2.0 protocol constants
 const (
-	Version = "2.0"
+	version = "2.0"
 	// JSON-RPC methods supported by this extension
-	MethodSessionGet           = "history/sessions/get"
-	MethodSessionsList         = "history/sessions/list"
-	MethodEventsList           = "history/events/list"
+	methodSessionGet           = "history/get"
+	methodSessionsList         = "history/list"
+	methodEventsList           = "history/events/list"
+	HistoryExtensionPath       = "/extensions/a2ahistory"
 )
 
 var (
 	// JSONRPC Errors
-	ErrInvalidRequest = errors.New("invalid request")
-	ErrInvalidParams  = errors.New("invalid parameters")
-	ErrMethodNotFound = errors.New("method not found")
+	errInvalidRequest = errors.New("invalid request")
+	errInvalidParams  = errors.New("invalid parameters")
+	errMethodNotFound = errors.New("method not found")
 )
 
 // jsonrpcRequest represents a JSON-RPC 2.0 request.
@@ -50,7 +51,7 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	// Validate that is "POST" request
 	if req.Method != "POST" {
-		h.writeJSONRPCError(ctx, rw, ErrInvalidRequest, nil)
+		h.writeJSONRPCError(ctx, rw, errInvalidRequest, nil)
 		return
 	}
 
@@ -62,19 +63,19 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	var payload jsonrpcRequest
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-		h.writeJSONRPCError(ctx, rw, ErrInvalidRequest, payload.ID)
+		h.writeJSONRPCError(ctx, rw, errInvalidRequest, payload.ID)
 		return
 	}
 
 	// Validate payload ID
 	if payload.ID == "" {
-		h.writeJSONRPCError(ctx, rw, ErrInvalidRequest, nil)
+		h.writeJSONRPCError(ctx, rw, errInvalidRequest, nil)
 		return
 	}
 
 	// Validate JSONRPC Version
-	if payload.JSONRPC != Version {
-		h.writeJSONRPCError(ctx, rw, ErrInvalidRequest, payload.ID)
+	if payload.JSONRPC != version {
+		h.writeJSONRPCError(ctx, rw, errInvalidRequest, payload.ID)
 		return
 	}
 
@@ -86,16 +87,16 @@ func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWrit
 	var result any
 	var err error 
 	switch req.Method {
-	case MethodSessionsList:
+	case methodSessionsList:
 		result, err = h.onHandleHistoriesList(ctx, req.Params)
-	case MethodSessionGet:
+	case methodSessionGet:
 		result, err = h.onHandleHistoryGet(ctx, req.Params)
-	case MethodEventsList:
+	case methodEventsList:
 		result, err = h.onHandleEventsList(ctx, req.Params)
 	case "":
-		err = ErrInvalidRequest
+		err = errInvalidRequest
 	default:
-		err = ErrMethodNotFound
+		err = errMethodNotFound
 	}
 	if err != nil {
 		h.writeJSONRPCError(ctx, rw, err, req.ID)
@@ -103,7 +104,7 @@ func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWrit
 	}
 
 	if result != nil {
-		resp := jsonrpcResponse{JSONRPC: Version, ID: req.ID, Result: result}
+		resp := jsonrpcResponse{JSONRPC: version, ID: req.ID, Result: result}
 		if err := json.NewEncoder(rw).Encode(resp); err != nil {
 			log.Fatal(ctx, "failed to encode response", err)
 		}
@@ -113,7 +114,7 @@ func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWrit
 func (h *jsonrpcHandler) onHandleHistoriesList(ctx context.Context, raw json.RawMessage) (*v1.ListA2AHistoriesResponse, error) {
 	var query *v1.ListA2AHistoriesRequest
 	if err := json.Unmarshal(raw, &query); err != nil {
-		return nil, ErrInvalidParams
+		return nil, errInvalidParams
 	}
 	return h.service.ListA2AHistories(ctx, query)
 }
@@ -121,7 +122,7 @@ func (h *jsonrpcHandler) onHandleHistoriesList(ctx context.Context, raw json.Raw
 func (h *jsonrpcHandler) onHandleHistoryGet(ctx context.Context, raw json.RawMessage) (*v1.A2AHistory, error) {
 	var query *v1.GetA2AHistoryRequest
 	if err := json.Unmarshal(raw, &query); err != nil {
-		return nil, ErrInvalidParams
+		return nil, errInvalidParams
 	}
 	return h.service.GetA2AHistory(ctx, query)
 }
@@ -129,13 +130,13 @@ func (h *jsonrpcHandler) onHandleHistoryGet(ctx context.Context, raw json.RawMes
 func (h *jsonrpcHandler) onHandleEventsList(ctx context.Context, raw json.RawMessage) (*v1.ListEventsResponse, error) {
 	var query *v1.ListEventsRequest
 	if err := json.Unmarshal(raw, &query); err != nil {
-		return nil, ErrInvalidParams
+		return nil, errInvalidParams
 	}
 	return h.service.ListEvents(ctx, query)
 }
 
 func (h *jsonrpcHandler) writeJSONRPCError(ctx context.Context, rw http.ResponseWriter, err error, reqID any) {
-	resp := jsonrpcResponse{JSONRPC: Version, Error: err.Error(), ID: reqID}
+	resp := jsonrpcResponse{JSONRPC: version, Error: err.Error(), ID: reqID}
 	if err := json.NewEncoder(rw).Encode(resp); err != nil {
 		log.Fatal(ctx, "failed to send error response", err)
 	}
