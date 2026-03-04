@@ -144,6 +144,7 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 		if err != nil {
 			return err
 		}
+		i.clear(invocationID)
 	}
 
 	// Capture the event
@@ -162,4 +163,10 @@ func (i *interceptor) cache(invocationID string, event *v1.A2AHistoryEvent) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.store[invocationID] = event
+}
+
+func (i *interceptor) clear(invocationID string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	delete(i.store, invocationID)
 }
