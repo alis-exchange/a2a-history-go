@@ -60,7 +60,7 @@ func toProtoTaskStatusUpdate(statusUpdate *a2a.TaskStatusUpdateEvent) (*v1.TaskS
 	}
 
 	result := &v1.TaskStatusUpdateEvent{
-		TaskId:    status.Message.TaskId,
+		TaskId:    string(statusUpdate.TaskInfo().TaskID),
 		ContextId: statusUpdate.ContextID,
 		Status:    status,
 		Metadata:  metadata,
