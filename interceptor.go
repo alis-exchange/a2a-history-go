@@ -16,6 +16,8 @@ const (
 	extensionUri = "https://github.com/alis-exchange/a2a-history-go/alis/a2a/extension/history/v1"
 )
 
+var _ a2asrv.CallInterceptor = (*interceptor)(nil)
+
 type interceptor struct {
 	service  Service
 	agentID  string
@@ -135,16 +137,17 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 	// Check for invocationID and any cached events to be captured
     invocationID, ok := ctx.Value(invocationKey).(string)
 	if ok {
-		event := i.store[invocationID]
-		event.Payload.(*v1.A2AHistoryEvent_Message).Message.ContextId = contextID
-		_, err := i.service.AppendEvent(ctx, &v1.AppendEventRequest{
-			Event: 	  event,
-			AgentId:  i.agentID,
-		})
-		if err != nil {
-			return err
+		if event, found := i.store[invocationID]; found {
+			event.Payload.(*v1.A2AHistoryEvent_Message).Message.ContextId = contextID
+			_, err := i.service.AppendEvent(ctx, &v1.AppendEventRequest{
+				Event: 	  event,
+				AgentId:  i.agentID,
+			})
+			if err != nil {
+				return err
+			}
+			i.clear(invocationID)
 		}
-		i.clear(invocationID)
 	}
 
 	// Capture the event
