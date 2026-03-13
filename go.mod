@@ -1,4 +1,4 @@
-module github.com/alis-exchange/a2a-history-go
+module go.alis.build/a2a/extension/history
 
 go 1.25.0
 
