@@ -7,14 +7,15 @@
 package v1
 
 import (
-	v1 "google.golang.org/genproto/googleapis/iam/v1"
+	v1 "go.alis.build/a2a/lf/a2a/v1"
+	v11 "google.golang.org/genproto/googleapis/iam/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	_ "google.golang.org/protobuf/types/known/emptypb"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	_ "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	v11 "open.alis.services/protobuf/alis/open/iam/v1"
+	v12 "open.alis.services/protobuf/alis/open/iam/v1"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -173,7 +174,7 @@ func (x *A2AHistoryEvent) GetPayload() isA2AHistoryEvent_Payload {
 	return nil
 }
 
-func (x *A2AHistoryEvent) GetTask() *Task {
+func (x *A2AHistoryEvent) GetTask() *v1.Task {
 	if x != nil {
 		if x, ok := x.Payload.(*A2AHistoryEvent_Task); ok {
 			return x.Task
@@ -182,7 +183,7 @@ func (x *A2AHistoryEvent) GetTask() *Task {
 	return nil
 }
 
-func (x *A2AHistoryEvent) GetMessage() *Message {
+func (x *A2AHistoryEvent) GetMessage() *v1.Message {
 	if x != nil {
 		if x, ok := x.Payload.(*A2AHistoryEvent_Message); ok {
 			return x.Message
@@ -191,7 +192,7 @@ func (x *A2AHistoryEvent) GetMessage() *Message {
 	return nil
 }
 
-func (x *A2AHistoryEvent) GetStatusUpdate() *TaskStatusUpdateEvent {
+func (x *A2AHistoryEvent) GetStatusUpdate() *v1.TaskStatusUpdateEvent {
 	if x != nil {
 		if x, ok := x.Payload.(*A2AHistoryEvent_StatusUpdate); ok {
 			return x.StatusUpdate
@@ -200,7 +201,7 @@ func (x *A2AHistoryEvent) GetStatusUpdate() *TaskStatusUpdateEvent {
 	return nil
 }
 
-func (x *A2AHistoryEvent) GetArtifactUpdate() *TaskArtifactUpdateEvent {
+func (x *A2AHistoryEvent) GetArtifactUpdate() *v1.TaskArtifactUpdateEvent {
 	if x != nil {
 		if x, ok := x.Payload.(*A2AHistoryEvent_ArtifactUpdate); ok {
 			return x.ArtifactUpdate
@@ -222,22 +223,22 @@ type isA2AHistoryEvent_Payload interface {
 
 type A2AHistoryEvent_Task struct {
 	// A Task object containing the current state of the task.
-	Task *Task `protobuf:"bytes,2,opt,name=task,proto3,oneof"`
+	Task *v1.Task `protobuf:"bytes,2,opt,name=task,proto3,oneof"`
 }
 
 type A2AHistoryEvent_Message struct {
 	// A Message object containing a message from the client/user.
-	Message *Message `protobuf:"bytes,3,opt,name=message,proto3,oneof"`
+	Message *v1.Message `protobuf:"bytes,3,opt,name=message,proto3,oneof"`
 }
 
 type A2AHistoryEvent_StatusUpdate struct {
 	// An event indicating a task status update.
-	StatusUpdate *TaskStatusUpdateEvent `protobuf:"bytes,4,opt,name=status_update,json=statusUpdate,proto3,oneof"`
+	StatusUpdate *v1.TaskStatusUpdateEvent `protobuf:"bytes,4,opt,name=status_update,json=statusUpdate,proto3,oneof"`
 }
 
 type A2AHistoryEvent_ArtifactUpdate struct {
 	// An event indicating a task artifact update.
-	ArtifactUpdate *TaskArtifactUpdateEvent `protobuf:"bytes,5,opt,name=artifact_update,json=artifactUpdate,proto3,oneof"`
+	ArtifactUpdate *v1.TaskArtifactUpdateEvent `protobuf:"bytes,5,opt,name=artifact_update,json=artifactUpdate,proto3,oneof"`
 }
 
 func (*A2AHistoryEvent_Task) isA2AHistoryEvent_Payload() {}
@@ -822,7 +823,7 @@ var File_alis_a2a_extension_history_v1_history_proto protoreflect.FileDescriptor
 
 const file_alis_a2a_extension_history_v1_history_proto_rawDesc = "" +
 	"\n" +
-	"+alis/a2a/extension/history/v1/history.proto\x12\x1dalis.a2a.extension.history.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a google/protobuf/field_mask.proto\x1a\x1agoogle/iam/v1/policy.proto\x1a\x1egoogle/iam/v1/iam_policy.proto\x1a\x1aalis/open/iam/v1/iam.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a'alis/a2a/extension/history/v1/a2a.proto\"\xc9\x01\n" +
+	"+alis/a2a/extension/history/v1/history.proto\x12\x1dalis.a2a.extension.history.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a google/protobuf/field_mask.proto\x1a\x1agoogle/iam/v1/policy.proto\x1a\x1egoogle/iam/v1/iam_policy.proto\x1a\x1aalis/open/iam/v1/iam.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x13lf/a2a/v1/a2a.proto\"\xc9\x01\n" +
 	"\n" +
 	"A2AHistory\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
@@ -830,13 +831,13 @@ const file_alis_a2a_extension_history_v1_history_proto_rawDesc = "" +
 	"\bagent_id\x18\x03 \x01(\tR\aagentId\x12,\n" +
 	"\x12agent_display_name\x18\x04 \x01(\tR\x10agentDisplayName\x12;\n" +
 	"\vcreate_time\x18b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xac\x03\n" +
+	"createTime\"\xdc\x02\n" +
 	"\x0fA2AHistoryEvent\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x129\n" +
-	"\x04task\x18\x02 \x01(\v2#.alis.a2a.extension.history.v1.TaskH\x00R\x04task\x12B\n" +
-	"\amessage\x18\x03 \x01(\v2&.alis.a2a.extension.history.v1.MessageH\x00R\amessage\x12[\n" +
-	"\rstatus_update\x18\x04 \x01(\v24.alis.a2a.extension.history.v1.TaskStatusUpdateEventH\x00R\fstatusUpdate\x12a\n" +
-	"\x0fartifact_update\x18\x05 \x01(\v26.alis.a2a.extension.history.v1.TaskArtifactUpdateEventH\x00R\x0eartifactUpdate\x12;\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12%\n" +
+	"\x04task\x18\x02 \x01(\v2\x0f.lf.a2a.v1.TaskH\x00R\x04task\x12.\n" +
+	"\amessage\x18\x03 \x01(\v2\x12.lf.a2a.v1.MessageH\x00R\amessage\x12G\n" +
+	"\rstatus_update\x18\x04 \x01(\v2 .lf.a2a.v1.TaskStatusUpdateEventH\x00R\fstatusUpdate\x12M\n" +
+	"\x0fartifact_update\x18\x05 \x01(\v2\".lf.a2a.v1.TaskArtifactUpdateEventH\x00R\x0eartifactUpdate\x12;\n" +
 	"\vcreate_time\x18b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTimeB\t\n" +
 	"\apayload\"c\n" +
@@ -916,27 +917,27 @@ var file_alis_a2a_extension_history_v1_history_proto_goTypes = []any{
 	(*AppendEventRequest)(nil),                  // 10: alis.a2a.extension.history.v1.AppendEventRequest
 	(*AppendEventResponse)(nil),                 // 11: alis.a2a.extension.history.v1.AppendEventResponse
 	(*timestamppb.Timestamp)(nil),               // 12: google.protobuf.Timestamp
-	(*Task)(nil),                                // 13: alis.a2a.extension.history.v1.Task
-	(*Message)(nil),                             // 14: alis.a2a.extension.history.v1.Message
-	(*TaskStatusUpdateEvent)(nil),               // 15: alis.a2a.extension.history.v1.TaskStatusUpdateEvent
-	(*TaskArtifactUpdateEvent)(nil),             // 16: alis.a2a.extension.history.v1.TaskArtifactUpdateEvent
+	(*v1.Task)(nil),                             // 13: lf.a2a.v1.Task
+	(*v1.Message)(nil),                          // 14: lf.a2a.v1.Message
+	(*v1.TaskStatusUpdateEvent)(nil),            // 15: lf.a2a.v1.TaskStatusUpdateEvent
+	(*v1.TaskArtifactUpdateEvent)(nil),          // 16: lf.a2a.v1.TaskArtifactUpdateEvent
 	(*fieldmaskpb.FieldMask)(nil),               // 17: google.protobuf.FieldMask
-	(*v1.GetIamPolicyRequest)(nil),              // 18: google.iam.v1.GetIamPolicyRequest
-	(*v1.SetIamPolicyRequest)(nil),              // 19: google.iam.v1.SetIamPolicyRequest
-	(*v1.TestIamPermissionsRequest)(nil),        // 20: google.iam.v1.TestIamPermissionsRequest
-	(*v11.BatchTestIamPermissionsRequest)(nil),  // 21: alis.open.iam.v1.BatchTestIamPermissionsRequest
-	(*v11.AddIamBindingsRequest)(nil),           // 22: alis.open.iam.v1.AddIamBindingsRequest
-	(*v11.RemoveIamBindingsRequest)(nil),        // 23: alis.open.iam.v1.RemoveIamBindingsRequest
-	(*v1.Policy)(nil),                           // 24: google.iam.v1.Policy
-	(*v1.TestIamPermissionsResponse)(nil),       // 25: google.iam.v1.TestIamPermissionsResponse
-	(*v11.BatchTestIamPermissionsResponse)(nil), // 26: alis.open.iam.v1.BatchTestIamPermissionsResponse
+	(*v11.GetIamPolicyRequest)(nil),             // 18: google.iam.v1.GetIamPolicyRequest
+	(*v11.SetIamPolicyRequest)(nil),             // 19: google.iam.v1.SetIamPolicyRequest
+	(*v11.TestIamPermissionsRequest)(nil),       // 20: google.iam.v1.TestIamPermissionsRequest
+	(*v12.BatchTestIamPermissionsRequest)(nil),  // 21: alis.open.iam.v1.BatchTestIamPermissionsRequest
+	(*v12.AddIamBindingsRequest)(nil),           // 22: alis.open.iam.v1.AddIamBindingsRequest
+	(*v12.RemoveIamBindingsRequest)(nil),        // 23: alis.open.iam.v1.RemoveIamBindingsRequest
+	(*v11.Policy)(nil),                          // 24: google.iam.v1.Policy
+	(*v11.TestIamPermissionsResponse)(nil),      // 25: google.iam.v1.TestIamPermissionsResponse
+	(*v12.BatchTestIamPermissionsResponse)(nil), // 26: alis.open.iam.v1.BatchTestIamPermissionsResponse
 }
 var file_alis_a2a_extension_history_v1_history_proto_depIdxs = []int32{
 	12, // 0: alis.a2a.extension.history.v1.A2AHistory.create_time:type_name -> google.protobuf.Timestamp
-	13, // 1: alis.a2a.extension.history.v1.A2AHistoryEvent.task:type_name -> alis.a2a.extension.history.v1.Task
-	14, // 2: alis.a2a.extension.history.v1.A2AHistoryEvent.message:type_name -> alis.a2a.extension.history.v1.Message
-	15, // 3: alis.a2a.extension.history.v1.A2AHistoryEvent.status_update:type_name -> alis.a2a.extension.history.v1.TaskStatusUpdateEvent
-	16, // 4: alis.a2a.extension.history.v1.A2AHistoryEvent.artifact_update:type_name -> alis.a2a.extension.history.v1.TaskArtifactUpdateEvent
+	13, // 1: alis.a2a.extension.history.v1.A2AHistoryEvent.task:type_name -> lf.a2a.v1.Task
+	14, // 2: alis.a2a.extension.history.v1.A2AHistoryEvent.message:type_name -> lf.a2a.v1.Message
+	15, // 3: alis.a2a.extension.history.v1.A2AHistoryEvent.status_update:type_name -> lf.a2a.v1.TaskStatusUpdateEvent
+	16, // 4: alis.a2a.extension.history.v1.A2AHistoryEvent.artifact_update:type_name -> lf.a2a.v1.TaskArtifactUpdateEvent
 	12, // 5: alis.a2a.extension.history.v1.A2AHistoryEvent.create_time:type_name -> google.protobuf.Timestamp
 	17, // 6: alis.a2a.extension.history.v1.GetA2AHistoryRequest.read_mask:type_name -> google.protobuf.FieldMask
 	17, // 7: alis.a2a.extension.history.v1.ListA2AHistoriesRequest.read_mask:type_name -> google.protobuf.FieldMask
@@ -982,7 +983,6 @@ func file_alis_a2a_extension_history_v1_history_proto_init() {
 	if File_alis_a2a_extension_history_v1_history_proto != nil {
 		return
 	}
-	file_alis_a2a_extension_history_v1_a2a_proto_init()
 	file_alis_a2a_extension_history_v1_history_proto_msgTypes[1].OneofWrappers = []any{
 		(*A2AHistoryEvent_Task)(nil),
 		(*A2AHistoryEvent_Message)(nil),
