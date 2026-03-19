@@ -28,7 +28,7 @@ For advanced developers wishing to have total flexibiliy and control over the ba
 ```go
 type Service interface {
 	// GetThread
-	GetThrad(ctx context.Context, req *v1.GetThreadRequest) (*v1.Thread, error)
+	GetThread(ctx context.Context, req *v1.GetThreadRequest) (*v1.Thread, error)
 	// ListThreads
 	ListThreads(ctx context.Context, req *v1.ListThreadsRequest) (*v1.ListThreadsResponse, error)
 	// ListThreadEvents
@@ -56,7 +56,7 @@ historyService, err := service.NewSpannerService(ctx, &service.SpannerStoreConfi
 })
 ```
 
-Below is the corresponding Terraform resource configuration that must be used for compatibiilyt with the `SpannerService`.
+Below is the corresponding Terraform resource configuration that must be used for compatibility with the `SpannerService`.
 
 ```
 resource "alis_google_spanner_table" "a2a_thread" {
@@ -182,6 +182,6 @@ var MyCustomService = MyCustomHistoryService{} // MyCustomService implements the
 requestHandler := a2asrv.NewHandler(
 		&agentExecutor{},
 		...
-		a2asrv.WithCallInterceptor(srv.NewInterceptor(MyService)),
+		a2asrv.WithCallInterceptor(srv.NewInterceptor(MyCustomService)),
 	)
 ```
