@@ -12,6 +12,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	v11 "open.alis.services/protobuf/alis/open/iam/v1"
 )
 
@@ -21,26 +22,27 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	A2AHistoryService_GetIamPolicy_FullMethodName            = "/alis.a2a.extension.history.v1.A2AHistoryService/GetIamPolicy"
-	A2AHistoryService_SetIamPolicy_FullMethodName            = "/alis.a2a.extension.history.v1.A2AHistoryService/SetIamPolicy"
-	A2AHistoryService_TestIamPermissions_FullMethodName      = "/alis.a2a.extension.history.v1.A2AHistoryService/TestIamPermissions"
-	A2AHistoryService_BatchTestIamPermissions_FullMethodName = "/alis.a2a.extension.history.v1.A2AHistoryService/BatchTestIamPermissions"
-	A2AHistoryService_AddIamBindings_FullMethodName          = "/alis.a2a.extension.history.v1.A2AHistoryService/AddIamBindings"
-	A2AHistoryService_RemoveIamBindings_FullMethodName       = "/alis.a2a.extension.history.v1.A2AHistoryService/RemoveIamBindings"
-	A2AHistoryService_ListA2AHistories_FullMethodName        = "/alis.a2a.extension.history.v1.A2AHistoryService/ListA2AHistories"
-	A2AHistoryService_GetA2AHistory_FullMethodName           = "/alis.a2a.extension.history.v1.A2AHistoryService/GetA2AHistory"
-	A2AHistoryService_DeleteA2AHistory_FullMethodName        = "/alis.a2a.extension.history.v1.A2AHistoryService/DeleteA2AHistory"
-	A2AHistoryService_AppendEvent_FullMethodName             = "/alis.a2a.extension.history.v1.A2AHistoryService/AppendEvent"
-	A2AHistoryService_ListEvents_FullMethodName              = "/alis.a2a.extension.history.v1.A2AHistoryService/ListEvents"
-	A2AHistoryService_StreamEvents_FullMethodName            = "/alis.a2a.extension.history.v1.A2AHistoryService/StreamEvents"
+	ThreadService_GetIamPolicy_FullMethodName            = "/alis.a2a.extension.history.v1.ThreadService/GetIamPolicy"
+	ThreadService_SetIamPolicy_FullMethodName            = "/alis.a2a.extension.history.v1.ThreadService/SetIamPolicy"
+	ThreadService_TestIamPermissions_FullMethodName      = "/alis.a2a.extension.history.v1.ThreadService/TestIamPermissions"
+	ThreadService_BatchTestIamPermissions_FullMethodName = "/alis.a2a.extension.history.v1.ThreadService/BatchTestIamPermissions"
+	ThreadService_AddIamBindings_FullMethodName          = "/alis.a2a.extension.history.v1.ThreadService/AddIamBindings"
+	ThreadService_RemoveIamBindings_FullMethodName       = "/alis.a2a.extension.history.v1.ThreadService/RemoveIamBindings"
+	ThreadService_ListThreads_FullMethodName             = "/alis.a2a.extension.history.v1.ThreadService/ListThreads"
+	ThreadService_GetThread_FullMethodName               = "/alis.a2a.extension.history.v1.ThreadService/GetThread"
+	ThreadService_DeleteThread_FullMethodName            = "/alis.a2a.extension.history.v1.ThreadService/DeleteThread"
+	ThreadService_AppendThreadEvent_FullMethodName       = "/alis.a2a.extension.history.v1.ThreadService/AppendThreadEvent"
+	ThreadService_ListThreadEvents_FullMethodName        = "/alis.a2a.extension.history.v1.ThreadService/ListThreadEvents"
+	ThreadService_StreamThreadEvents_FullMethodName      = "/alis.a2a.extension.history.v1.ThreadService/StreamThreadEvents"
 )
 
-// A2AHistoryServiceClient is the client API for A2AHistoryService service.
+// ThreadServiceClient is the client API for ThreadService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// A2AHistoryService
-type A2AHistoryServiceClient interface {
+// Manages persisted A2A conversation threads and their events, including
+// thread listing, event appends, event streaming, and IAM policy access.
+type ThreadServiceClient interface {
 	// Gets the IAM policy for a resource implemented in this service.
 	GetIamPolicy(ctx context.Context, in *v1.GetIamPolicyRequest, opts ...grpc.CallOption) (*v1.Policy, error)
 	// Sets the IAM policy for a resource implemented in this service.
@@ -53,145 +55,145 @@ type A2AHistoryServiceClient interface {
 	AddIamBindings(ctx context.Context, in *v11.AddIamBindingsRequest, opts ...grpc.CallOption) (*v1.Policy, error)
 	// Removes principals or some of the roles they have on an IAM Policy protected resource.
 	RemoveIamBindings(ctx context.Context, in *v11.RemoveIamBindingsRequest, opts ...grpc.CallOption) (*v1.Policy, error)
-	// Lists all histories.
-	ListA2AHistories(ctx context.Context, in *ListA2AHistoriesRequest, opts ...grpc.CallOption) (*ListA2AHistoriesResponse, error)
-	// Gets an A2AHistory by its resource name.
-	GetA2AHistory(ctx context.Context, in *GetA2AHistoryRequest, opts ...grpc.CallOption) (*A2AHistory, error)
-	// Deletes an A2AHistory.
-	DeleteA2AHistory(ctx context.Context, in *DeleteA2AHistoryRequest, opts ...grpc.CallOption) (*A2AHistory, error)
-	// Appends an event to a given A2AHistory
-	AppendEvent(ctx context.Context, in *AppendEventRequest, opts ...grpc.CallOption) (*AppendEventResponse, error)
+	// Lists all Threads.
+	ListThreads(ctx context.Context, in *ListThreadsRequest, opts ...grpc.CallOption) (*ListThreadsResponse, error)
+	// Gets an Thread by its resource name.
+	GetThread(ctx context.Context, in *GetThreadRequest, opts ...grpc.CallOption) (*Thread, error)
+	// Deletes an Thread.
+	DeleteThread(ctx context.Context, in *DeleteThreadRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Appends an event to a given Thread
+	AppendThreadEvent(ctx context.Context, in *AppendThreadEventRequest, opts ...grpc.CallOption) (*AppendThreadEventResponse, error)
 	// Lists all events.
-	ListEvents(ctx context.Context, in *ListEventsRequest, opts ...grpc.CallOption) (*ListEventsResponse, error)
+	ListThreadEvents(ctx context.Context, in *ListThreadEventsRequest, opts ...grpc.CallOption) (*ListThreadEventsResponse, error)
 	// Stream events.
-	StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[A2AHistoryEvent], error)
+	StreamThreadEvents(ctx context.Context, in *StreamThreadEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ThreadEvent], error)
 }
 
-type a2AHistoryServiceClient struct {
+type threadServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewA2AHistoryServiceClient(cc grpc.ClientConnInterface) A2AHistoryServiceClient {
-	return &a2AHistoryServiceClient{cc}
+func NewThreadServiceClient(cc grpc.ClientConnInterface) ThreadServiceClient {
+	return &threadServiceClient{cc}
 }
 
-func (c *a2AHistoryServiceClient) GetIamPolicy(ctx context.Context, in *v1.GetIamPolicyRequest, opts ...grpc.CallOption) (*v1.Policy, error) {
+func (c *threadServiceClient) GetIamPolicy(ctx context.Context, in *v1.GetIamPolicyRequest, opts ...grpc.CallOption) (*v1.Policy, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(v1.Policy)
-	err := c.cc.Invoke(ctx, A2AHistoryService_GetIamPolicy_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ThreadService_GetIamPolicy_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *a2AHistoryServiceClient) SetIamPolicy(ctx context.Context, in *v1.SetIamPolicyRequest, opts ...grpc.CallOption) (*v1.Policy, error) {
+func (c *threadServiceClient) SetIamPolicy(ctx context.Context, in *v1.SetIamPolicyRequest, opts ...grpc.CallOption) (*v1.Policy, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(v1.Policy)
-	err := c.cc.Invoke(ctx, A2AHistoryService_SetIamPolicy_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ThreadService_SetIamPolicy_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *a2AHistoryServiceClient) TestIamPermissions(ctx context.Context, in *v1.TestIamPermissionsRequest, opts ...grpc.CallOption) (*v1.TestIamPermissionsResponse, error) {
+func (c *threadServiceClient) TestIamPermissions(ctx context.Context, in *v1.TestIamPermissionsRequest, opts ...grpc.CallOption) (*v1.TestIamPermissionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(v1.TestIamPermissionsResponse)
-	err := c.cc.Invoke(ctx, A2AHistoryService_TestIamPermissions_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ThreadService_TestIamPermissions_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *a2AHistoryServiceClient) BatchTestIamPermissions(ctx context.Context, in *v11.BatchTestIamPermissionsRequest, opts ...grpc.CallOption) (*v11.BatchTestIamPermissionsResponse, error) {
+func (c *threadServiceClient) BatchTestIamPermissions(ctx context.Context, in *v11.BatchTestIamPermissionsRequest, opts ...grpc.CallOption) (*v11.BatchTestIamPermissionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(v11.BatchTestIamPermissionsResponse)
-	err := c.cc.Invoke(ctx, A2AHistoryService_BatchTestIamPermissions_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ThreadService_BatchTestIamPermissions_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *a2AHistoryServiceClient) AddIamBindings(ctx context.Context, in *v11.AddIamBindingsRequest, opts ...grpc.CallOption) (*v1.Policy, error) {
+func (c *threadServiceClient) AddIamBindings(ctx context.Context, in *v11.AddIamBindingsRequest, opts ...grpc.CallOption) (*v1.Policy, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(v1.Policy)
-	err := c.cc.Invoke(ctx, A2AHistoryService_AddIamBindings_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ThreadService_AddIamBindings_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *a2AHistoryServiceClient) RemoveIamBindings(ctx context.Context, in *v11.RemoveIamBindingsRequest, opts ...grpc.CallOption) (*v1.Policy, error) {
+func (c *threadServiceClient) RemoveIamBindings(ctx context.Context, in *v11.RemoveIamBindingsRequest, opts ...grpc.CallOption) (*v1.Policy, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(v1.Policy)
-	err := c.cc.Invoke(ctx, A2AHistoryService_RemoveIamBindings_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ThreadService_RemoveIamBindings_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *a2AHistoryServiceClient) ListA2AHistories(ctx context.Context, in *ListA2AHistoriesRequest, opts ...grpc.CallOption) (*ListA2AHistoriesResponse, error) {
+func (c *threadServiceClient) ListThreads(ctx context.Context, in *ListThreadsRequest, opts ...grpc.CallOption) (*ListThreadsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListA2AHistoriesResponse)
-	err := c.cc.Invoke(ctx, A2AHistoryService_ListA2AHistories_FullMethodName, in, out, cOpts...)
+	out := new(ListThreadsResponse)
+	err := c.cc.Invoke(ctx, ThreadService_ListThreads_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *a2AHistoryServiceClient) GetA2AHistory(ctx context.Context, in *GetA2AHistoryRequest, opts ...grpc.CallOption) (*A2AHistory, error) {
+func (c *threadServiceClient) GetThread(ctx context.Context, in *GetThreadRequest, opts ...grpc.CallOption) (*Thread, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(A2AHistory)
-	err := c.cc.Invoke(ctx, A2AHistoryService_GetA2AHistory_FullMethodName, in, out, cOpts...)
+	out := new(Thread)
+	err := c.cc.Invoke(ctx, ThreadService_GetThread_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *a2AHistoryServiceClient) DeleteA2AHistory(ctx context.Context, in *DeleteA2AHistoryRequest, opts ...grpc.CallOption) (*A2AHistory, error) {
+func (c *threadServiceClient) DeleteThread(ctx context.Context, in *DeleteThreadRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(A2AHistory)
-	err := c.cc.Invoke(ctx, A2AHistoryService_DeleteA2AHistory_FullMethodName, in, out, cOpts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, ThreadService_DeleteThread_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *a2AHistoryServiceClient) AppendEvent(ctx context.Context, in *AppendEventRequest, opts ...grpc.CallOption) (*AppendEventResponse, error) {
+func (c *threadServiceClient) AppendThreadEvent(ctx context.Context, in *AppendThreadEventRequest, opts ...grpc.CallOption) (*AppendThreadEventResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AppendEventResponse)
-	err := c.cc.Invoke(ctx, A2AHistoryService_AppendEvent_FullMethodName, in, out, cOpts...)
+	out := new(AppendThreadEventResponse)
+	err := c.cc.Invoke(ctx, ThreadService_AppendThreadEvent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *a2AHistoryServiceClient) ListEvents(ctx context.Context, in *ListEventsRequest, opts ...grpc.CallOption) (*ListEventsResponse, error) {
+func (c *threadServiceClient) ListThreadEvents(ctx context.Context, in *ListThreadEventsRequest, opts ...grpc.CallOption) (*ListThreadEventsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListEventsResponse)
-	err := c.cc.Invoke(ctx, A2AHistoryService_ListEvents_FullMethodName, in, out, cOpts...)
+	out := new(ListThreadEventsResponse)
+	err := c.cc.Invoke(ctx, ThreadService_ListThreadEvents_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *a2AHistoryServiceClient) StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[A2AHistoryEvent], error) {
+func (c *threadServiceClient) StreamThreadEvents(ctx context.Context, in *StreamThreadEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ThreadEvent], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &A2AHistoryService_ServiceDesc.Streams[0], A2AHistoryService_StreamEvents_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &ThreadService_ServiceDesc.Streams[0], ThreadService_StreamThreadEvents_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[StreamEventsRequest, A2AHistoryEvent]{ClientStream: stream}
+	x := &grpc.GenericClientStream[StreamThreadEventsRequest, ThreadEvent]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -202,14 +204,15 @@ func (c *a2AHistoryServiceClient) StreamEvents(ctx context.Context, in *StreamEv
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type A2AHistoryService_StreamEventsClient = grpc.ServerStreamingClient[A2AHistoryEvent]
+type ThreadService_StreamThreadEventsClient = grpc.ServerStreamingClient[ThreadEvent]
 
-// A2AHistoryServiceServer is the server API for A2AHistoryService service.
-// All implementations must embed UnimplementedA2AHistoryServiceServer
+// ThreadServiceServer is the server API for ThreadService service.
+// All implementations must embed UnimplementedThreadServiceServer
 // for forward compatibility.
 //
-// A2AHistoryService
-type A2AHistoryServiceServer interface {
+// Manages persisted A2A conversation threads and their events, including
+// thread listing, event appends, event streaming, and IAM policy access.
+type ThreadServiceServer interface {
 	// Gets the IAM policy for a resource implemented in this service.
 	GetIamPolicy(context.Context, *v1.GetIamPolicyRequest) (*v1.Policy, error)
 	// Sets the IAM policy for a resource implemented in this service.
@@ -222,350 +225,350 @@ type A2AHistoryServiceServer interface {
 	AddIamBindings(context.Context, *v11.AddIamBindingsRequest) (*v1.Policy, error)
 	// Removes principals or some of the roles they have on an IAM Policy protected resource.
 	RemoveIamBindings(context.Context, *v11.RemoveIamBindingsRequest) (*v1.Policy, error)
-	// Lists all histories.
-	ListA2AHistories(context.Context, *ListA2AHistoriesRequest) (*ListA2AHistoriesResponse, error)
-	// Gets an A2AHistory by its resource name.
-	GetA2AHistory(context.Context, *GetA2AHistoryRequest) (*A2AHistory, error)
-	// Deletes an A2AHistory.
-	DeleteA2AHistory(context.Context, *DeleteA2AHistoryRequest) (*A2AHistory, error)
-	// Appends an event to a given A2AHistory
-	AppendEvent(context.Context, *AppendEventRequest) (*AppendEventResponse, error)
+	// Lists all Threads.
+	ListThreads(context.Context, *ListThreadsRequest) (*ListThreadsResponse, error)
+	// Gets an Thread by its resource name.
+	GetThread(context.Context, *GetThreadRequest) (*Thread, error)
+	// Deletes an Thread.
+	DeleteThread(context.Context, *DeleteThreadRequest) (*emptypb.Empty, error)
+	// Appends an event to a given Thread
+	AppendThreadEvent(context.Context, *AppendThreadEventRequest) (*AppendThreadEventResponse, error)
 	// Lists all events.
-	ListEvents(context.Context, *ListEventsRequest) (*ListEventsResponse, error)
+	ListThreadEvents(context.Context, *ListThreadEventsRequest) (*ListThreadEventsResponse, error)
 	// Stream events.
-	StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[A2AHistoryEvent]) error
-	mustEmbedUnimplementedA2AHistoryServiceServer()
+	StreamThreadEvents(*StreamThreadEventsRequest, grpc.ServerStreamingServer[ThreadEvent]) error
+	mustEmbedUnimplementedThreadServiceServer()
 }
 
-// UnimplementedA2AHistoryServiceServer must be embedded to have
+// UnimplementedThreadServiceServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedA2AHistoryServiceServer struct{}
+type UnimplementedThreadServiceServer struct{}
 
-func (UnimplementedA2AHistoryServiceServer) GetIamPolicy(context.Context, *v1.GetIamPolicyRequest) (*v1.Policy, error) {
+func (UnimplementedThreadServiceServer) GetIamPolicy(context.Context, *v1.GetIamPolicyRequest) (*v1.Policy, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetIamPolicy not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) SetIamPolicy(context.Context, *v1.SetIamPolicyRequest) (*v1.Policy, error) {
+func (UnimplementedThreadServiceServer) SetIamPolicy(context.Context, *v1.SetIamPolicyRequest) (*v1.Policy, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetIamPolicy not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) TestIamPermissions(context.Context, *v1.TestIamPermissionsRequest) (*v1.TestIamPermissionsResponse, error) {
+func (UnimplementedThreadServiceServer) TestIamPermissions(context.Context, *v1.TestIamPermissionsRequest) (*v1.TestIamPermissionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method TestIamPermissions not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) BatchTestIamPermissions(context.Context, *v11.BatchTestIamPermissionsRequest) (*v11.BatchTestIamPermissionsResponse, error) {
+func (UnimplementedThreadServiceServer) BatchTestIamPermissions(context.Context, *v11.BatchTestIamPermissionsRequest) (*v11.BatchTestIamPermissionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BatchTestIamPermissions not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) AddIamBindings(context.Context, *v11.AddIamBindingsRequest) (*v1.Policy, error) {
+func (UnimplementedThreadServiceServer) AddIamBindings(context.Context, *v11.AddIamBindingsRequest) (*v1.Policy, error) {
 	return nil, status.Error(codes.Unimplemented, "method AddIamBindings not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) RemoveIamBindings(context.Context, *v11.RemoveIamBindingsRequest) (*v1.Policy, error) {
+func (UnimplementedThreadServiceServer) RemoveIamBindings(context.Context, *v11.RemoveIamBindingsRequest) (*v1.Policy, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveIamBindings not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) ListA2AHistories(context.Context, *ListA2AHistoriesRequest) (*ListA2AHistoriesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListA2AHistories not implemented")
+func (UnimplementedThreadServiceServer) ListThreads(context.Context, *ListThreadsRequest) (*ListThreadsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListThreads not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) GetA2AHistory(context.Context, *GetA2AHistoryRequest) (*A2AHistory, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetA2AHistory not implemented")
+func (UnimplementedThreadServiceServer) GetThread(context.Context, *GetThreadRequest) (*Thread, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetThread not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) DeleteA2AHistory(context.Context, *DeleteA2AHistoryRequest) (*A2AHistory, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteA2AHistory not implemented")
+func (UnimplementedThreadServiceServer) DeleteThread(context.Context, *DeleteThreadRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteThread not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) AppendEvent(context.Context, *AppendEventRequest) (*AppendEventResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AppendEvent not implemented")
+func (UnimplementedThreadServiceServer) AppendThreadEvent(context.Context, *AppendThreadEventRequest) (*AppendThreadEventResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AppendThreadEvent not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) ListEvents(context.Context, *ListEventsRequest) (*ListEventsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListEvents not implemented")
+func (UnimplementedThreadServiceServer) ListThreadEvents(context.Context, *ListThreadEventsRequest) (*ListThreadEventsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListThreadEvents not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[A2AHistoryEvent]) error {
-	return status.Error(codes.Unimplemented, "method StreamEvents not implemented")
+func (UnimplementedThreadServiceServer) StreamThreadEvents(*StreamThreadEventsRequest, grpc.ServerStreamingServer[ThreadEvent]) error {
+	return status.Error(codes.Unimplemented, "method StreamThreadEvents not implemented")
 }
-func (UnimplementedA2AHistoryServiceServer) mustEmbedUnimplementedA2AHistoryServiceServer() {}
-func (UnimplementedA2AHistoryServiceServer) testEmbeddedByValue()                           {}
+func (UnimplementedThreadServiceServer) mustEmbedUnimplementedThreadServiceServer() {}
+func (UnimplementedThreadServiceServer) testEmbeddedByValue()                       {}
 
-// UnsafeA2AHistoryServiceServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to A2AHistoryServiceServer will
+// UnsafeThreadServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ThreadServiceServer will
 // result in compilation errors.
-type UnsafeA2AHistoryServiceServer interface {
-	mustEmbedUnimplementedA2AHistoryServiceServer()
+type UnsafeThreadServiceServer interface {
+	mustEmbedUnimplementedThreadServiceServer()
 }
 
-func RegisterA2AHistoryServiceServer(s grpc.ServiceRegistrar, srv A2AHistoryServiceServer) {
-	// If the following call panics, it indicates UnimplementedA2AHistoryServiceServer was
+func RegisterThreadServiceServer(s grpc.ServiceRegistrar, srv ThreadServiceServer) {
+	// If the following call panics, it indicates UnimplementedThreadServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&A2AHistoryService_ServiceDesc, srv)
+	s.RegisterService(&ThreadService_ServiceDesc, srv)
 }
 
-func _A2AHistoryService_GetIamPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ThreadService_GetIamPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(v1.GetIamPolicyRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(A2AHistoryServiceServer).GetIamPolicy(ctx, in)
+		return srv.(ThreadServiceServer).GetIamPolicy(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: A2AHistoryService_GetIamPolicy_FullMethodName,
+		FullMethod: ThreadService_GetIamPolicy_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(A2AHistoryServiceServer).GetIamPolicy(ctx, req.(*v1.GetIamPolicyRequest))
+		return srv.(ThreadServiceServer).GetIamPolicy(ctx, req.(*v1.GetIamPolicyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _A2AHistoryService_SetIamPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ThreadService_SetIamPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(v1.SetIamPolicyRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(A2AHistoryServiceServer).SetIamPolicy(ctx, in)
+		return srv.(ThreadServiceServer).SetIamPolicy(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: A2AHistoryService_SetIamPolicy_FullMethodName,
+		FullMethod: ThreadService_SetIamPolicy_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(A2AHistoryServiceServer).SetIamPolicy(ctx, req.(*v1.SetIamPolicyRequest))
+		return srv.(ThreadServiceServer).SetIamPolicy(ctx, req.(*v1.SetIamPolicyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _A2AHistoryService_TestIamPermissions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ThreadService_TestIamPermissions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(v1.TestIamPermissionsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(A2AHistoryServiceServer).TestIamPermissions(ctx, in)
+		return srv.(ThreadServiceServer).TestIamPermissions(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: A2AHistoryService_TestIamPermissions_FullMethodName,
+		FullMethod: ThreadService_TestIamPermissions_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(A2AHistoryServiceServer).TestIamPermissions(ctx, req.(*v1.TestIamPermissionsRequest))
+		return srv.(ThreadServiceServer).TestIamPermissions(ctx, req.(*v1.TestIamPermissionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _A2AHistoryService_BatchTestIamPermissions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ThreadService_BatchTestIamPermissions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(v11.BatchTestIamPermissionsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(A2AHistoryServiceServer).BatchTestIamPermissions(ctx, in)
+		return srv.(ThreadServiceServer).BatchTestIamPermissions(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: A2AHistoryService_BatchTestIamPermissions_FullMethodName,
+		FullMethod: ThreadService_BatchTestIamPermissions_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(A2AHistoryServiceServer).BatchTestIamPermissions(ctx, req.(*v11.BatchTestIamPermissionsRequest))
+		return srv.(ThreadServiceServer).BatchTestIamPermissions(ctx, req.(*v11.BatchTestIamPermissionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _A2AHistoryService_AddIamBindings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ThreadService_AddIamBindings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(v11.AddIamBindingsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(A2AHistoryServiceServer).AddIamBindings(ctx, in)
+		return srv.(ThreadServiceServer).AddIamBindings(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: A2AHistoryService_AddIamBindings_FullMethodName,
+		FullMethod: ThreadService_AddIamBindings_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(A2AHistoryServiceServer).AddIamBindings(ctx, req.(*v11.AddIamBindingsRequest))
+		return srv.(ThreadServiceServer).AddIamBindings(ctx, req.(*v11.AddIamBindingsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _A2AHistoryService_RemoveIamBindings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ThreadService_RemoveIamBindings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(v11.RemoveIamBindingsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(A2AHistoryServiceServer).RemoveIamBindings(ctx, in)
+		return srv.(ThreadServiceServer).RemoveIamBindings(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: A2AHistoryService_RemoveIamBindings_FullMethodName,
+		FullMethod: ThreadService_RemoveIamBindings_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(A2AHistoryServiceServer).RemoveIamBindings(ctx, req.(*v11.RemoveIamBindingsRequest))
+		return srv.(ThreadServiceServer).RemoveIamBindings(ctx, req.(*v11.RemoveIamBindingsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _A2AHistoryService_ListA2AHistories_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListA2AHistoriesRequest)
+func _ThreadService_ListThreads_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListThreadsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(A2AHistoryServiceServer).ListA2AHistories(ctx, in)
+		return srv.(ThreadServiceServer).ListThreads(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: A2AHistoryService_ListA2AHistories_FullMethodName,
+		FullMethod: ThreadService_ListThreads_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(A2AHistoryServiceServer).ListA2AHistories(ctx, req.(*ListA2AHistoriesRequest))
+		return srv.(ThreadServiceServer).ListThreads(ctx, req.(*ListThreadsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _A2AHistoryService_GetA2AHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetA2AHistoryRequest)
+func _ThreadService_GetThread_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetThreadRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(A2AHistoryServiceServer).GetA2AHistory(ctx, in)
+		return srv.(ThreadServiceServer).GetThread(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: A2AHistoryService_GetA2AHistory_FullMethodName,
+		FullMethod: ThreadService_GetThread_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(A2AHistoryServiceServer).GetA2AHistory(ctx, req.(*GetA2AHistoryRequest))
+		return srv.(ThreadServiceServer).GetThread(ctx, req.(*GetThreadRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _A2AHistoryService_DeleteA2AHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteA2AHistoryRequest)
+func _ThreadService_DeleteThread_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteThreadRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(A2AHistoryServiceServer).DeleteA2AHistory(ctx, in)
+		return srv.(ThreadServiceServer).DeleteThread(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: A2AHistoryService_DeleteA2AHistory_FullMethodName,
+		FullMethod: ThreadService_DeleteThread_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(A2AHistoryServiceServer).DeleteA2AHistory(ctx, req.(*DeleteA2AHistoryRequest))
+		return srv.(ThreadServiceServer).DeleteThread(ctx, req.(*DeleteThreadRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _A2AHistoryService_AppendEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AppendEventRequest)
+func _ThreadService_AppendThreadEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppendThreadEventRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(A2AHistoryServiceServer).AppendEvent(ctx, in)
+		return srv.(ThreadServiceServer).AppendThreadEvent(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: A2AHistoryService_AppendEvent_FullMethodName,
+		FullMethod: ThreadService_AppendThreadEvent_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(A2AHistoryServiceServer).AppendEvent(ctx, req.(*AppendEventRequest))
+		return srv.(ThreadServiceServer).AppendThreadEvent(ctx, req.(*AppendThreadEventRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _A2AHistoryService_ListEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListEventsRequest)
+func _ThreadService_ListThreadEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListThreadEventsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(A2AHistoryServiceServer).ListEvents(ctx, in)
+		return srv.(ThreadServiceServer).ListThreadEvents(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: A2AHistoryService_ListEvents_FullMethodName,
+		FullMethod: ThreadService_ListThreadEvents_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(A2AHistoryServiceServer).ListEvents(ctx, req.(*ListEventsRequest))
+		return srv.(ThreadServiceServer).ListThreadEvents(ctx, req.(*ListThreadEventsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _A2AHistoryService_StreamEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(StreamEventsRequest)
+func _ThreadService_StreamThreadEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamThreadEventsRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(A2AHistoryServiceServer).StreamEvents(m, &grpc.GenericServerStream[StreamEventsRequest, A2AHistoryEvent]{ServerStream: stream})
+	return srv.(ThreadServiceServer).StreamThreadEvents(m, &grpc.GenericServerStream[StreamThreadEventsRequest, ThreadEvent]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type A2AHistoryService_StreamEventsServer = grpc.ServerStreamingServer[A2AHistoryEvent]
+type ThreadService_StreamThreadEventsServer = grpc.ServerStreamingServer[ThreadEvent]
 
-// A2AHistoryService_ServiceDesc is the grpc.ServiceDesc for A2AHistoryService service.
+// ThreadService_ServiceDesc is the grpc.ServiceDesc for ThreadService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var A2AHistoryService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "alis.a2a.extension.history.v1.A2AHistoryService",
-	HandlerType: (*A2AHistoryServiceServer)(nil),
+var ThreadService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "alis.a2a.extension.history.v1.ThreadService",
+	HandlerType: (*ThreadServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "GetIamPolicy",
-			Handler:    _A2AHistoryService_GetIamPolicy_Handler,
+			Handler:    _ThreadService_GetIamPolicy_Handler,
 		},
 		{
 			MethodName: "SetIamPolicy",
-			Handler:    _A2AHistoryService_SetIamPolicy_Handler,
+			Handler:    _ThreadService_SetIamPolicy_Handler,
 		},
 		{
 			MethodName: "TestIamPermissions",
-			Handler:    _A2AHistoryService_TestIamPermissions_Handler,
+			Handler:    _ThreadService_TestIamPermissions_Handler,
 		},
 		{
 			MethodName: "BatchTestIamPermissions",
-			Handler:    _A2AHistoryService_BatchTestIamPermissions_Handler,
+			Handler:    _ThreadService_BatchTestIamPermissions_Handler,
 		},
 		{
 			MethodName: "AddIamBindings",
-			Handler:    _A2AHistoryService_AddIamBindings_Handler,
+			Handler:    _ThreadService_AddIamBindings_Handler,
 		},
 		{
 			MethodName: "RemoveIamBindings",
-			Handler:    _A2AHistoryService_RemoveIamBindings_Handler,
+			Handler:    _ThreadService_RemoveIamBindings_Handler,
 		},
 		{
-			MethodName: "ListA2AHistories",
-			Handler:    _A2AHistoryService_ListA2AHistories_Handler,
+			MethodName: "ListThreads",
+			Handler:    _ThreadService_ListThreads_Handler,
 		},
 		{
-			MethodName: "GetA2AHistory",
-			Handler:    _A2AHistoryService_GetA2AHistory_Handler,
+			MethodName: "GetThread",
+			Handler:    _ThreadService_GetThread_Handler,
 		},
 		{
-			MethodName: "DeleteA2AHistory",
-			Handler:    _A2AHistoryService_DeleteA2AHistory_Handler,
+			MethodName: "DeleteThread",
+			Handler:    _ThreadService_DeleteThread_Handler,
 		},
 		{
-			MethodName: "AppendEvent",
-			Handler:    _A2AHistoryService_AppendEvent_Handler,
+			MethodName: "AppendThreadEvent",
+			Handler:    _ThreadService_AppendThreadEvent_Handler,
 		},
 		{
-			MethodName: "ListEvents",
-			Handler:    _A2AHistoryService_ListEvents_Handler,
+			MethodName: "ListThreadEvents",
+			Handler:    _ThreadService_ListThreadEvents_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "StreamEvents",
-			Handler:       _A2AHistoryService_StreamEvents_Handler,
+			StreamName:    "StreamThreadEvents",
+			Handler:       _ThreadService_StreamThreadEvents_Handler,
 			ServerStreams: true,
 		},
 	},

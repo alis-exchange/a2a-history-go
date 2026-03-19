@@ -3,33 +3,33 @@
 // Source: alis/a2a/extension/history/v1/history.proto
 // Plugin version: v0.0.1
 //
-// Generated on: 2026-03-19 09:07:04 UTC
+// Generated on: 2026-03-19 09:19:43 UTC
 
 package v1
 
 const (
-	// A2AHistoryService_GetIamPolicy_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.GetIamPolicy method.
-	A2AHistoryService_GetIamPolicy_FullMethodDescription = "Gets the IAM policy for a resource implemented in this service."
-	// A2AHistoryService_SetIamPolicy_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.SetIamPolicy method.
-	A2AHistoryService_SetIamPolicy_FullMethodDescription = "Sets the IAM policy for a resource implemented in this service."
-	// A2AHistoryService_TestIamPermissions_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.TestIamPermissions method.
-	A2AHistoryService_TestIamPermissions_FullMethodDescription = "Returns permissions that a caller has on the specified resource."
-	// A2AHistoryService_BatchTestIamPermissions_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.BatchTestIamPermissions method.
-	A2AHistoryService_BatchTestIamPermissions_FullMethodDescription = "Returns permissions that a caller has on the specified resources."
-	// A2AHistoryService_AddIamBindings_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.AddIamBindings method.
-	A2AHistoryService_AddIamBindings_FullMethodDescription = "Adds principals or updates the roles existing principals have on an IAM Policy protected resource."
-	// A2AHistoryService_RemoveIamBindings_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.RemoveIamBindings method.
-	A2AHistoryService_RemoveIamBindings_FullMethodDescription = "Removes principals or some of the roles they have on an IAM Policy protected resource."
-	// A2AHistoryService_ListA2AHistories_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.ListA2AHistories method.
-	A2AHistoryService_ListA2AHistories_FullMethodDescription = "Lists all histories."
-	// A2AHistoryService_GetA2AHistory_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.GetA2AHistory method.
-	A2AHistoryService_GetA2AHistory_FullMethodDescription = "Gets an A2AHistory by its resource name."
-	// A2AHistoryService_DeleteA2AHistory_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.DeleteA2AHistory method.
-	A2AHistoryService_DeleteA2AHistory_FullMethodDescription = "Deletes an A2AHistory."
-	// A2AHistoryService_AppendEvent_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.AppendEvent method.
-	A2AHistoryService_AppendEvent_FullMethodDescription = "Appends an event to a given A2AHistory"
-	// A2AHistoryService_ListEvents_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.ListEvents method.
-	A2AHistoryService_ListEvents_FullMethodDescription = "Lists all events."
-	// A2AHistoryService_StreamEvents_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.A2AHistoryService.StreamEvents method.
-	A2AHistoryService_StreamEvents_FullMethodDescription = "Stream events."
+	// ThreadService_GetIamPolicy_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.GetIamPolicy method.
+	ThreadService_GetIamPolicy_FullMethodDescription = "Gets the IAM policy for a resource implemented in this service."
+	// ThreadService_SetIamPolicy_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.SetIamPolicy method.
+	ThreadService_SetIamPolicy_FullMethodDescription = "Sets the IAM policy for a resource implemented in this service."
+	// ThreadService_TestIamPermissions_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.TestIamPermissions method.
+	ThreadService_TestIamPermissions_FullMethodDescription = "Returns permissions that a caller has on the specified resource."
+	// ThreadService_BatchTestIamPermissions_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.BatchTestIamPermissions method.
+	ThreadService_BatchTestIamPermissions_FullMethodDescription = "Returns permissions that a caller has on the specified resources."
+	// ThreadService_AddIamBindings_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.AddIamBindings method.
+	ThreadService_AddIamBindings_FullMethodDescription = "Adds principals or updates the roles existing principals have on an IAM Policy protected resource."
+	// ThreadService_RemoveIamBindings_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.RemoveIamBindings method.
+	ThreadService_RemoveIamBindings_FullMethodDescription = "Removes principals or some of the roles they have on an IAM Policy protected resource."
+	// ThreadService_ListThreads_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.ListThreads method.
+	ThreadService_ListThreads_FullMethodDescription = "Lists all Threads."
+	// ThreadService_GetThread_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.GetThread method.
+	ThreadService_GetThread_FullMethodDescription = "Gets an Thread by its resource name."
+	// ThreadService_DeleteThread_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.DeleteThread method.
+	ThreadService_DeleteThread_FullMethodDescription = "Deletes an Thread."
+	// ThreadService_AppendThreadEvent_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.AppendThreadEvent method.
+	ThreadService_AppendThreadEvent_FullMethodDescription = "Appends an event to a given Thread"
+	// ThreadService_ListThreadEvents_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.ListThreadEvents method.
+	ThreadService_ListThreadEvents_FullMethodDescription = "Lists all events."
+	// ThreadService_StreamThreadEvents_FullMethodDescription returns the description of the alis.a2a.extension.history.v1.ThreadService.StreamThreadEvents method.
+	ThreadService_StreamThreadEvents_FullMethodDescription = "Stream events."
 )
