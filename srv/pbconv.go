@@ -1,15 +1,14 @@
-package a2ahistory
+package srv
 
 import (
 	"fmt"
-
-	"github.com/a2aproject/a2a-go/v2/a2a"
-	v1 "go.alis.build/a2a/lf/a2a/v1"
+	"github.com/a2aproject/a2a-go/a2a"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	a2apb "go.alis.build/a2a/lf/a2a/v1"
 )
 
-func toProtoTask(task *a2a.Task) (*v1.Task, error) {
+func toProtoTask(task *a2a.Task) (*a2apb.Task, error) {
 	if task == nil {
 		return nil, nil
 	}
@@ -34,7 +33,7 @@ func toProtoTask(task *a2a.Task) (*v1.Task, error) {
 		return nil, fmt.Errorf("failed to convert metadata to proto struct: %w", err)
 	}
 
-	result := &v1.Task{
+	result := &a2apb.Task{
 		Id:        string(task.ID),
 		ContextId: task.ContextID,
 		Status:    status,
@@ -45,7 +44,7 @@ func toProtoTask(task *a2a.Task) (*v1.Task, error) {
 	return result, nil
 }
 
-func toProtoTaskStatusUpdate(statusUpdate *a2a.TaskStatusUpdateEvent) (*v1.TaskStatusUpdateEvent, error) {
+func toProtoTaskStatusUpdate(statusUpdate *a2a.TaskStatusUpdateEvent) (*a2apb.TaskStatusUpdateEvent, error) {
 	if statusUpdate == nil {
 		return nil, nil
 	}
@@ -60,7 +59,7 @@ func toProtoTaskStatusUpdate(statusUpdate *a2a.TaskStatusUpdateEvent) (*v1.TaskS
 		return nil, fmt.Errorf("failed to convert metadata to proto struct: %w", err)
 	}
 
-	result := &v1.TaskStatusUpdateEvent{
+	result := &a2apb.TaskStatusUpdateEvent{
 		TaskId:    string(statusUpdate.TaskInfo().TaskID),
 		ContextId: statusUpdate.ContextID,
 		Status:    status,
@@ -69,7 +68,7 @@ func toProtoTaskStatusUpdate(statusUpdate *a2a.TaskStatusUpdateEvent) (*v1.TaskS
 	return result, nil
 }
 
-func toProtoTaskArtifacteUpdate(artifactUpdate *a2a.TaskArtifactUpdateEvent) (*v1.TaskArtifactUpdateEvent, error) {
+func toProtoTaskArtifacteUpdate(artifactUpdate *a2a.TaskArtifactUpdateEvent) (*a2apb.TaskArtifactUpdateEvent, error) {
 	if artifactUpdate == nil {
 		return nil, nil
 	}
@@ -84,7 +83,7 @@ func toProtoTaskArtifacteUpdate(artifactUpdate *a2a.TaskArtifactUpdateEvent) (*v
 		return nil, fmt.Errorf("failed to convert metadata to proto struct: %w", err)
 	}
 
-	result := &v1.TaskArtifactUpdateEvent{
+	result := &a2apb.TaskArtifactUpdateEvent{
 		TaskId:    string(artifactUpdate.TaskID),
 		ContextId: artifactUpdate.ContextID,
 		Artifact:  artifact,
@@ -95,8 +94,8 @@ func toProtoTaskArtifacteUpdate(artifactUpdate *a2a.TaskArtifactUpdateEvent) (*v
 	return result, nil
 }
 
-func toProtoMessages(msgs []*a2a.Message) ([]*v1.Message, error) {
-	pMsgs := make([]*v1.Message, len(msgs))
+func toProtoMessages(msgs []*a2a.Message) ([]*a2apb.Message, error) {
+	pMsgs := make([]*a2apb.Message, len(msgs))
 	for i, msg := range msgs {
 		pMsg, err := toProtoMessage(msg)
 		if err != nil {
@@ -107,7 +106,7 @@ func toProtoMessages(msgs []*a2a.Message) ([]*v1.Message, error) {
 	return pMsgs, nil
 }
 
-func toProtoMessage(msg *a2a.Message) (*v1.Message, error) {
+func toProtoMessage(msg *a2a.Message) (*a2apb.Message, error) {
 	if msg == nil {
 		return nil, nil
 	}
@@ -130,20 +129,20 @@ func toProtoMessage(msg *a2a.Message) (*v1.Message, error) {
 		}
 	}
 
-	return &v1.Message{
-		MessageId:        msg.ID,
-		ContextId:        msg.ContextID,
-		TaskId:           string(msg.TaskID),
-		Role:             toProtoRole(msg.Role),
-		Parts:            parts,
-		Metadata:         meta,
-		Extensions:       msg.Extensions,
+	return &a2apb.Message{
+		MessageId: msg.ID,
+		ContextId: msg.ContextID,
+		TaskId: string(msg.TaskID),
+		Role: toProtoRole(msg.Role),
+		Parts: parts,
+		Metadata: meta,
+		Extensions: msg.Extensions,
 		ReferenceTaskIds: taskIDs,
 	}, nil
 }
 
-func toProtoParts(parts []*a2a.Part) ([]*v1.Part, error) {
-	pParts := make([]*v1.Part, len(parts))
+func toProtoParts(parts a2a.ContentParts) ([]*a2apb.Part, error) {
+	pParts := make([]*a2apb.Part, len(parts))
 	for i, part := range parts {
 		pPart, err := toProtoPart(part)
 		if err != nil {
@@ -154,57 +153,67 @@ func toProtoParts(parts []*a2a.Part) ([]*v1.Part, error) {
 	return pParts, nil
 }
 
-func toProtoPart(part *a2a.Part) (*v1.Part, error) {
-	if part == nil {
-		return nil, nil
+func toProtoPart(part *a2a.Part) (*a2apb.Part, error) {
+	switch p := part.Content.(type) {
+	case a2a.Text:
+		return toProtoTextPart(part)
+	case a2a.Data:
+		return toProtoDataPart(part)
+	case a2a.Raw:
+		return toProtoFilePart(part)
+	default:
+		return nil, fmt.Errorf("unsupported part type: %T", p)
 	}
+}
 
-	var metadata *structpb.Struct
-	if len(part.Metadata) > 0 {
-		var err error
-		metadata, err = structpb.NewStruct(part.Metadata)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert metadata to proto struct: %w", err)
-		}
+func toProtoTextPart(part *a2a.Part) (*a2apb.Part, error) {
+	metadata, err := toProtoStruct(part.Metadata)
+	if err != nil {
+		return nil, err
 	}
-	result := &v1.Part{
-		Content:   nil,
+	return &a2apb.Part{
+		Content: &a2apb.Part_Text{
+			Text: part.Text(),
+		},
+		Metadata:  metadata,
+		MediaType: "text/plain",
+	}, nil
+}
+
+func toProtoDataPart(part *a2a.Part) (*a2apb.Part, error) {
+	data, err := toProtoValue(part.Data())
+	if err != nil {
+		return nil, err
+	}
+	metadata, err := toProtoStruct(part.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	return &a2apb.Part{
+		Content:   &a2apb.Part_Data{
+			Data: data,
+		},
+		Metadata: metadata,
+	}, nil
+}
+
+func toProtoFilePart(part *a2a.Part) (*a2apb.Part, error) {
+	metadata, err := toProtoStruct(part.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	return &a2apb.Part{
+		Content: &a2apb.Part_Raw{
+			Raw: part.Raw(),
+		},
 		Metadata:  metadata,
 		Filename:  part.Filename,
 		MediaType: part.MediaType,
-	}
-
-	switch part.Content.(type) {
-	case a2a.Text:
-		result.Content = &v1.Part_Text{
-			Text: part.Text(),
-		}
-	case a2a.Data:
-		data, err := structpb.NewValue(part.Data())
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert data to proto value: %w", err)
-		}
-
-		result.Content = &v1.Part_Data{
-			Data: data,
-		}
-	case a2a.URL:
-		result.Content = &v1.Part_Url{
-			Url: string(part.URL()),
-		}
-	case a2a.Raw:
-		result.Content = &v1.Part_Raw{
-			Raw: part.Raw(),
-		}
-	default:
-		return nil, fmt.Errorf("unsupported part type: %T", part.Content)
-	}
-
-	return result, nil
+	}, nil
 }
 
-func toProtoArtifacts(artifacts []*a2a.Artifact) ([]*v1.Artifact, error) {
-	result := make([]*v1.Artifact, len(artifacts))
+func toProtoArtifacts(artifacts []*a2a.Artifact) ([]*a2apb.Artifact, error) {
+	result := make([]*a2apb.Artifact, len(artifacts))
 	for i, artifact := range artifacts {
 		pArtifact, err := toProtoArtifact(artifact)
 		if err != nil {
@@ -217,7 +226,7 @@ func toProtoArtifacts(artifacts []*a2a.Artifact) ([]*v1.Artifact, error) {
 	return result, nil
 }
 
-func toProtoArtifact(artifact *a2a.Artifact) (*v1.Artifact, error) {
+func toProtoArtifact(artifact *a2a.Artifact) (*a2apb.Artifact, error) {
 	if artifact == nil {
 		return nil, nil
 	}
@@ -232,7 +241,7 @@ func toProtoArtifact(artifact *a2a.Artifact) (*v1.Artifact, error) {
 		return nil, fmt.Errorf("failed to convert to proto parts: %w", err)
 	}
 
-	return &v1.Artifact{
+	return &a2apb.Artifact{
 		ArtifactId:  string(artifact.ID),
 		Name:        artifact.Name,
 		Description: artifact.Description,
@@ -242,14 +251,14 @@ func toProtoArtifact(artifact *a2a.Artifact) (*v1.Artifact, error) {
 	}, nil
 }
 
-func toProtoTaskStatus(status a2a.TaskStatus) (*v1.TaskStatus, error) {
+func toProtoTaskStatus(status a2a.TaskStatus) (*a2apb.TaskStatus, error) {
 	message, err := toProtoMessage(status.Message)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert message for task status: %w", err)
 	}
 
-	pStatus := &v1.TaskStatus{
-		State:   toProtoTaskState(status.State),
+	pStatus := &a2apb.TaskStatus{
+		State:  toProtoTaskState(status.State),
 		Message: message,
 	}
 	if status.Timestamp != nil {
@@ -270,10 +279,7 @@ func toProtoStruct(data map[string]any) (*structpb.Struct, error) {
 	return s, nil
 }
 
-func toProtoValue(data map[string]any) (*structpb.Value, error) {
-	if data == nil {
-		return nil, nil
-	}
+func toProtoValue(data any) (*structpb.Value, error) {
 	s, err := structpb.NewValue(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert metadata to proto value: %w", err)
@@ -281,36 +287,36 @@ func toProtoValue(data map[string]any) (*structpb.Value, error) {
 	return s, nil
 }
 
-func toProtoRole(role a2a.MessageRole) v1.Role {
+func toProtoRole(role a2a.MessageRole) a2apb.Role {
 	switch role {
 	case a2a.MessageRoleUser:
-		return v1.Role_ROLE_USER
+		return a2apb.Role_ROLE_USER
 	case a2a.MessageRoleAgent:
-		return v1.Role_ROLE_AGENT
+		return a2apb.Role_ROLE_AGENT
 	default:
-		return v1.Role_ROLE_UNSPECIFIED
+		return a2apb.Role_ROLE_UNSPECIFIED
 	}
 }
 
-func toProtoTaskState(state a2a.TaskState) v1.TaskState {
+func toProtoTaskState(state a2a.TaskState) a2apb.TaskState {
 	switch state {
 	case a2a.TaskStateAuthRequired:
-		return v1.TaskState_TASK_STATE_AUTH_REQUIRED
+		return a2apb.TaskState_TASK_STATE_AUTH_REQUIRED
 	case a2a.TaskStateCanceled:
-		return v1.TaskState_TASK_STATE_CANCELED
+		return a2apb.TaskState_TASK_STATE_CANCELED
 	case a2a.TaskStateCompleted:
-		return v1.TaskState_TASK_STATE_COMPLETED
+		return a2apb.TaskState_TASK_STATE_COMPLETED
 	case a2a.TaskStateFailed:
-		return v1.TaskState_TASK_STATE_FAILED
+		return a2apb.TaskState_TASK_STATE_FAILED
 	case a2a.TaskStateInputRequired:
-		return v1.TaskState_TASK_STATE_INPUT_REQUIRED
+		return a2apb.TaskState_TASK_STATE_INPUT_REQUIRED
 	case a2a.TaskStateRejected:
-		return v1.TaskState_TASK_STATE_REJECTED
+		return a2apb.TaskState_TASK_STATE_REJECTED
 	case a2a.TaskStateSubmitted:
-		return v1.TaskState_TASK_STATE_SUBMITTED
+		return a2apb.TaskState_TASK_STATE_SUBMITTED
 	case a2a.TaskStateWorking:
-		return v1.TaskState_TASK_STATE_WORKING
+		return a2apb.TaskState_TASK_STATE_WORKING
 	default:
-		return v1.TaskState_TASK_STATE_UNSPECIFIED
+		return a2apb.TaskState_TASK_STATE_UNSPECIFIED
 	}
 }

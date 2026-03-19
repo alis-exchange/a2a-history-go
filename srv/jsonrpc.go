@@ -1,33 +1,30 @@
-package a2ahistory
+package srv
 
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"errors"
 	"log"
-	"net/http"
-
-	v1 "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
+	"go.alis.build/a2a/extension/history/service"
+	"go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
 )
 
 // JSON-RPC 2.0 protocol constants
 const (
 	version = "2.0"
 	// JSON-RPC methods supported by this extension
-	methodSessionGet     = "history/get"
-	methodSessionsList   = "history/list"
-	methodEventsList     = "history/events/list"
-	HistoryExtensionPath = "/extensions/a2ahistory"
+	methodGetThread          = "GetThread"
+	methodListThreads        = "ListThreads"
+	methodListThreadEvents   = "ListThreadEvents"
+	HistoryExtensionPath     = "/extensions/a2ahistory"
 )
 
 var (
 	// JSONRPC Errors
-	errInvalidRequest = ErrInvalidRequest{err: errors.New("invalid request")}
-	errInvalidParams  = ErrInvalidParams{err: errors.New("invalid parameters")}
-	errMethodNotFound = ErrMethodNotFound{err: errors.New("method not found")}
-	errInternalError  = ErrInternalError{err: errors.New("internal error")}
-	errParseError     = ErrParseError{err: errors.New("parse error")}
-	errServerError    = ErrServerError{err: errors.New("server error")}
+	errInvalidRequest = errors.New("invalid request")
+	errInvalidParams  = errors.New("invalid parameters")
+	errMethodNotFound = errors.New("method not found")
 )
 
 // jsonrpcRequest represents a JSON-RPC 2.0 request.
@@ -35,19 +32,19 @@ type jsonrpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params,omitempty"`
-	ID      any             `json:"id"`
+	ID any 				    `json:"id"`
 }
 
 // jsonrpcResponse represents a JSON-RPC 2.0 response.
 type jsonrpcResponse struct {
-	JSONRPC string              `json:"jsonrpc"`
-	ID      any                 `json:"id"`
-	Result  any                 `json:"result,omitempty"`
-	Error   *jsonrpcErrorObject `json:"error,omitempty"`
+	JSONRPC string         `json:"jsonrpc"`
+	ID      any            `json:"id"`
+	Result  any            `json:"result,omitempty"`
+	Error   string         `json:"error,omitempty"`
 }
 
 type jsonrpcHandler struct {
-	service Service
+	service service.Service
 }
 
 func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
@@ -89,13 +86,13 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWriter, req *jsonrpcRequest) {
 	var result any
-	var err error
+	var err error 
 	switch req.Method {
-	case methodSessionsList:
-		result, err = h.onHandleHistoriesList(ctx, req.Params)
-	case methodSessionGet:
-		result, err = h.onHandleHistoryGet(ctx, req.Params)
-	case methodEventsList:
+	case methodListThreads:
+		result, err = h.onHandleThreadsList(ctx, req.Params)
+	case methodGetThread:
+		result, err = h.onHandleThreadGet(ctx, req.Params)
+	case methodListThreadEvents:
 		result, err = h.onHandleEventsList(ctx, req.Params)
 	case "":
 		err = errInvalidRequest
@@ -115,46 +112,38 @@ func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWrit
 	}
 }
 
-func (h *jsonrpcHandler) onHandleHistoriesList(ctx context.Context, raw json.RawMessage) (*v1.ListA2AHistoriesResponse, error) {
-	var query *v1.ListA2AHistoriesRequest
+func (h *jsonrpcHandler) onHandleThreadsList(ctx context.Context, raw json.RawMessage) (*v1.ListThreadsResponse, error) {
+	var query *v1.ListThreadsRequest
 	if err := json.Unmarshal(raw, &query); err != nil {
 		return nil, errInvalidParams
 	}
-	return h.service.ListA2AHistories(ctx, query)
+	return h.service.ListThreads(ctx, query)
 }
 
-func (h *jsonrpcHandler) onHandleHistoryGet(ctx context.Context, raw json.RawMessage) (*v1.A2AHistory, error) {
-	var query *v1.GetA2AHistoryRequest
+func (h *jsonrpcHandler) onHandleThreadGet(ctx context.Context, raw json.RawMessage) (*v1.Thread, error) {
+	var query *v1.GetThreadRequest
 	if err := json.Unmarshal(raw, &query); err != nil {
 		return nil, errInvalidParams
 	}
-	return h.service.GetA2AHistory(ctx, query)
+	return h.service.GetThread(ctx, query)
 }
 
-func (h *jsonrpcHandler) onHandleEventsList(ctx context.Context, raw json.RawMessage) (*v1.ListEventsResponse, error) {
-	var query *v1.ListEventsRequest
+func (h *jsonrpcHandler) onHandleEventsList(ctx context.Context, raw json.RawMessage) (*v1.ListThreadEventsResponse, error) {
+	var query *v1.ListThreadEventsRequest
 	if err := json.Unmarshal(raw, &query); err != nil {
 		return nil, errInvalidParams
 	}
-	return h.service.ListEvents(ctx, query)
+	return h.service.ListThreadEvents(ctx, query)
 }
 
 func (h *jsonrpcHandler) writeJSONRPCError(ctx context.Context, rw http.ResponseWriter, err error, reqID any) {
-	if err == nil {
-		return
-	}
-
-	var jsonrpcError JSONRPCError
-	if !errors.As(err, &jsonrpcError) {
-		jsonrpcError = errInternalError
-	}
-	resp := jsonrpcResponse{JSONRPC: version, Error: jsonrpcError.JSONRPCErrorObject(), ID: reqID}
+	resp := jsonrpcResponse{JSONRPC: version, Error: err.Error(), ID: reqID}
 	if err := json.NewEncoder(rw).Encode(resp); err != nil {
 		log.Fatal(ctx, "failed to send error response", err)
 	}
 }
 
-func NewJSONRPCHandler(service Service) http.Handler {
+func NewJSONRPCHandler(service service.Service) http.Handler {
 	return &jsonrpcHandler{
 		service: service,
 	}
