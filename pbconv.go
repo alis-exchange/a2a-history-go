@@ -2,10 +2,11 @@ package a2ahistory
 
 import (
 	"fmt"
-	"github.com/a2aproject/a2a-go/a2a"
+
+	"github.com/a2aproject/a2a-go/v2/a2a"
+	v1 "go.alis.build/a2a/lf/a2a/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"github.com/alis-exchange/a2a-history-go/alis/a2a/extension/history/v1"
 )
 
 func toProtoTask(task *a2a.Task) (*v1.Task, error) {
@@ -130,18 +131,18 @@ func toProtoMessage(msg *a2a.Message) (*v1.Message, error) {
 	}
 
 	return &v1.Message{
-		MessageId: msg.ID,
-		ContextId: msg.ContextID,
-		TaskId: string(msg.TaskID),
-		Role: toProtoRole(msg.Role),
-		Parts: parts,
-		Metadata: meta,
-		Extensions: msg.Extensions,
+		MessageId:        msg.ID,
+		ContextId:        msg.ContextID,
+		TaskId:           string(msg.TaskID),
+		Role:             toProtoRole(msg.Role),
+		Parts:            parts,
+		Metadata:         meta,
+		Extensions:       msg.Extensions,
 		ReferenceTaskIds: taskIDs,
 	}, nil
 }
 
-func toProtoParts(parts []a2a.Part) ([]*v1.Part, error) {
+func toProtoParts(parts []*a2a.Part) ([]*v1.Part, error) {
 	pParts := make([]*v1.Part, len(parts))
 	for i, part := range parts {
 		pPart, err := toProtoPart(part)
@@ -153,73 +154,53 @@ func toProtoParts(parts []a2a.Part) ([]*v1.Part, error) {
 	return pParts, nil
 }
 
-func toProtoPart(part a2a.Part) (*v1.Part, error) {
-	switch p := part.(type) {
-	case a2a.TextPart:
-		meta, err := toProtoStruct(p.Metadata)
+func toProtoPart(part *a2a.Part) (*v1.Part, error) {
+	if part == nil {
+		return nil, nil
+	}
+
+	var metadata *structpb.Struct
+	if len(part.Metadata) > 0 {
+		var err error
+		metadata, err = structpb.NewStruct(part.Metadata)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to convert metadata to proto struct: %w", err)
 		}
-		return &v1.Part{
-			Content: &v1.Part_Text{
-				Text: p.Text,
-			},
-			Metadata:  meta,
-			MediaType: "text/plain",
-		}, nil
-	case a2a.DataPart:
-		return toProtoDataPart(p)
-	case a2a.FilePart:
-		return toProtoFilePart(p)
-	default:
-		return nil, fmt.Errorf("unsupported part type: %T", p)
 	}
-}
+	result := &v1.Part{
+		Content:   nil,
+		Metadata:  metadata,
+		Filename:  part.Filename,
+		MediaType: part.MediaType,
+	}
 
-func toProtoFilePart(part a2a.FilePart) (*v1.Part, error) {
-	meta, err := toProtoStruct(part.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	switch fc := part.File.(type) {
-	case a2a.FileBytes:
-		return &v1.Part{
-			Content:   &v1.Part_Raw{
-				Raw: []byte(fc.Bytes),
-			},
-			Filename:  fc.Name,
-			MediaType: fc.MimeType,
-			Metadata:  meta,
-		}, nil
-	case a2a.FileURI:
-		return &v1.Part{
-			Content:   &v1.Part_Url{
-				Url: fc.URI,
-			},
-			Filename:  fc.Name,
-			MediaType: fc.MimeType,
-			Metadata:  meta,
-		}, nil
-	default:
-		return nil, fmt.Errorf("unsupported FilePartContent type: %T", fc)
-	}
-}
+	switch part.Content.(type) {
+	case a2a.Text:
+		result.Content = &v1.Part_Text{
+			Text: part.Text(),
+		}
+	case a2a.Data:
+		data, err := structpb.NewValue(part.Data())
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert data to proto value: %w", err)
+		}
 
-func toProtoDataPart(part a2a.DataPart) (*v1.Part, error) {
-	data, err := toProtoValue(part.Data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert data to proto struct: %w", err)
-	}
-	meta, err := toProtoStruct(part.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	return &v1.Part{
-		Content:   &v1.Part_Data{
+		result.Content = &v1.Part_Data{
 			Data: data,
-		},
-		Metadata:  meta,
-	}, nil
+		}
+	case a2a.URL:
+		result.Content = &v1.Part_Url{
+			Url: string(part.URL()),
+		}
+	case a2a.Raw:
+		result.Content = &v1.Part_Raw{
+			Raw: part.Raw(),
+		}
+	default:
+		return nil, fmt.Errorf("unsupported part type: %T", part.Content)
+	}
+
+	return result, nil
 }
 
 func toProtoArtifacts(artifacts []*a2a.Artifact) ([]*v1.Artifact, error) {
@@ -268,7 +249,7 @@ func toProtoTaskStatus(status a2a.TaskStatus) (*v1.TaskStatus, error) {
 	}
 
 	pStatus := &v1.TaskStatus{
-		State:  toProtoTaskState(status.State),
+		State:   toProtoTaskState(status.State),
 		Message: message,
 	}
 	if status.Timestamp != nil {

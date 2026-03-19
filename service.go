@@ -2,7 +2,8 @@ package a2ahistory
 
 import (
 	"context"
-	"github.com/alis-exchange/a2a-history-go/alis/a2a/extension/history/v1"
+
+	"go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
 )
 
 // Service is a A2A History storage service.
@@ -17,4 +18,3 @@ type Service interface {
 	// AppendEvent
 	AppendEvent(ctx context.Context, req *v1.AppendEventRequest) (*v1.AppendEventResponse, error)
 }
-

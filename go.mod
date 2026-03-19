@@ -3,8 +3,9 @@ module go.alis.build/a2a/extension/history
 go 1.25.0
 
 require (
-	github.com/a2aproject/a2a-go v0.3.7
+	github.com/a2aproject/a2a-go/v2 v2.0.0
 	github.com/google/uuid v1.6.0
+	go.alis.build/a2a v1.0.492
 	google.golang.org/genproto v0.0.0-20260223185530-2f722ef697dc
 	google.golang.org/genproto/googleapis/api v0.0.0-20260223185530-2f722ef697dc
 	google.golang.org/grpc v1.79.1

@@ -3,27 +3,31 @@ package a2ahistory
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"errors"
 	"log"
-	"github.com/alis-exchange/a2a-history-go/alis/a2a/extension/history/v1"
+	"net/http"
+
+	v1 "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
 )
 
 // JSON-RPC 2.0 protocol constants
 const (
 	version = "2.0"
 	// JSON-RPC methods supported by this extension
-	methodSessionGet           = "history/get"
-	methodSessionsList         = "history/list"
-	methodEventsList           = "history/events/list"
-	HistoryExtensionPath       = "/extensions/a2ahistory"
+	methodSessionGet     = "history/get"
+	methodSessionsList   = "history/list"
+	methodEventsList     = "history/events/list"
+	HistoryExtensionPath = "/extensions/a2ahistory"
 )
 
 var (
 	// JSONRPC Errors
-	errInvalidRequest = errors.New("invalid request")
-	errInvalidParams  = errors.New("invalid parameters")
-	errMethodNotFound = errors.New("method not found")
+	errInvalidRequest = ErrInvalidRequest{err: errors.New("invalid request")}
+	errInvalidParams  = ErrInvalidParams{err: errors.New("invalid parameters")}
+	errMethodNotFound = ErrMethodNotFound{err: errors.New("method not found")}
+	errInternalError  = ErrInternalError{err: errors.New("internal error")}
+	errParseError     = ErrParseError{err: errors.New("parse error")}
+	errServerError    = ErrServerError{err: errors.New("server error")}
 )
 
 // jsonrpcRequest represents a JSON-RPC 2.0 request.
@@ -31,15 +35,15 @@ type jsonrpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params,omitempty"`
-	ID any 				    `json:"id"`
+	ID      any             `json:"id"`
 }
 
 // jsonrpcResponse represents a JSON-RPC 2.0 response.
 type jsonrpcResponse struct {
-	JSONRPC string         `json:"jsonrpc"`
-	ID      any            `json:"id"`
-	Result  any            `json:"result,omitempty"`
-	Error   string         `json:"error,omitempty"`
+	JSONRPC string              `json:"jsonrpc"`
+	ID      any                 `json:"id"`
+	Result  any                 `json:"result,omitempty"`
+	Error   *jsonrpcErrorObject `json:"error,omitempty"`
 }
 
 type jsonrpcHandler struct {
@@ -85,7 +89,7 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWriter, req *jsonrpcRequest) {
 	var result any
-	var err error 
+	var err error
 	switch req.Method {
 	case methodSessionsList:
 		result, err = h.onHandleHistoriesList(ctx, req.Params)
@@ -136,7 +140,15 @@ func (h *jsonrpcHandler) onHandleEventsList(ctx context.Context, raw json.RawMes
 }
 
 func (h *jsonrpcHandler) writeJSONRPCError(ctx context.Context, rw http.ResponseWriter, err error, reqID any) {
-	resp := jsonrpcResponse{JSONRPC: version, Error: err.Error(), ID: reqID}
+	if err == nil {
+		return
+	}
+
+	var jsonrpcError JSONRPCError
+	if !errors.As(err, &jsonrpcError) {
+		jsonrpcError = errInternalError
+	}
+	resp := jsonrpcResponse{JSONRPC: version, Error: jsonrpcError.JSONRPCErrorObject(), ID: reqID}
 	if err := json.NewEncoder(rw).Encode(resp); err != nil {
 		log.Fatal(ctx, "failed to send error response", err)
 	}
