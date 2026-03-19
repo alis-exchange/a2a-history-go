@@ -4,7 +4,7 @@
 
 ### 1.1 Overview
 
-This document desribes the `a2a-history` extension. The extension standardises how A2A clients retrieve, list, and manage historical interaction data produced by A2A agents. By providing a structured way to access past histories and events, clients can implement features like "conversation cistory" and "conversation resumption" across different client implementations. 
+This document desribes the `a2a-history` extension. The extension standardises how A2A clients retrieve, list, and manage historical interaction data produced by A2A agents. By providing a structured way to access past histories and events, clients can implement features like "conversation history" and "conversation resumption" across different client channels. 
 
 ### 1.2 Motivation
 
@@ -35,29 +35,24 @@ The following is sample of an AgentCard advertising support for this extension:
       {
         "uri": "https://github.com/alis-exchange/a2a-history-go/alis/a2a/extension/history/v1/spec.md",
         "description": "",
-        "required": false,
-        "params": {
-            "a2a_extension_history_v1_agent_id": "some unique identifier (this is optional)"
-        },
+        "required": false
       }
     ]
   }
 }
 ```
 
-Note: Details on the expected use of 'a2a_extension_history_v1_agent_id' parameter will be covered further [below](#3-method-definitions).
-
 ## 2. Resource Model and Schema
 
 The extension introduces a hierarchical resource model.
 
-### A2AHistory 
+### Thread
 A lightweight collection representing a unique interaction context. This is tightly coupled to the A2A 'context_id' field.
 
 ```proto
 // Represents a collection of events tied to a specific context.
-message A2AHistory {
-    // The unique identifier for this history collection.
+message Thread {
+    // The unique identifier for this thread collection.
     string context_id = 1;
     // The ID of the agent to which this collection belongs.
     string agent_id = 2;
@@ -69,14 +64,14 @@ message A2AHistory {
 
 ```
 
-### A2AHistoryEvent
-An immutable record of a specific A2A event payload (`Task`, `Message`, `TaskStatusUpdateEvent`, `TaskArtifactUpdateEvent`) emitted by an agent within an interaction context and stored within a given A2AHistory collection.
+### ThreadEvent
+An immutable record of a specific A2A event payload (`Task`, `Message`, `TaskStatusUpdateEvent`, `TaskArtifactUpdateEvent`) emitted by an agent within an interaction context and stored within a given Thread collection.
 
 ```proto
 
-message A2AHistoryEvent {
+message ThreadEvent {
     // The resource name of the event.
-    // a2ahistories/{context_id}/events/{event_id}
+    // threads/{thread_id}/events/{event_id}
     string name = 1;
     oneof payload {
         // An event indicating an A2A task object.
@@ -101,26 +96,19 @@ Note: The resource model naming convention used by this extension delibrately av
 
 The extension introduces a set of custom RPC methods. Agents that support the extension MUST expose all of these methods.
 
-#### `history/list`
+#### `ListThreads`
 
-This method allows the client to retrieve a paginated list of available interaction histories. Clients would typically use this method to discover the set of available histories made available by the agent. 
-
-By design, the `history/list` method (and `history/events/list` below) accomodates for two architectural scenarios with respect to the resource persistence layer:
-
-1. An agent has a dedicated storage layer responsible only for storing events relevant to itself. In this scenario, any returned histories are guarenteed to belong to the agent. 
-2. An agent shares a central event storage layer (together with other agents), in which case the agent must be uniquely identified in order to retrieve only relevant histories. 
-
-In the latter case, the 'AgentCard' MUST expose the 'a2a_extension_history_v1_agent_id' parameter so that clients can correctly populate the 'agent_id'. In the simpler case, the 'agent_id' field can be left empty and the 'a2a_extension_history_v1_agent_id' parameter can be ommited or left empty. Implementors of the storage persistence layer are responsible for deciding if the 'agent_id' field is required and returning appropriate errors. 
+This method allows the client to retrieve a paginated list of available interaction histories. Clients would typically use this method to discover the set of available Threads made available by the agent. 
 
 ```proto
-message ListA2AHistoriesRequest {
+message ListThreadsRequest {
     // Reserved.
     reserved 1;
-    // The maximum number of histories to return.
+    // The maximum number of threads to return.
     int32 page_size = 2;
     // A page token to retrieve the next page of results.
     string page_token = 3;
-    // Optional filtering of histories by unique agent identifier.
+    // Optional filtering of threads by unique agent identifier.
     string agent_id = 4;
     // A read mask to specify which fields to return.
     // If not specified, view will determine the fields returned.
@@ -128,14 +116,27 @@ message ListA2AHistoriesRequest {
 }
 ```
 
-#### `history/events/list`
+#### `GetThread`
 
-This method allows the client to retrieve a paginated list of all events associated with a specific history. After identifying the relevant parent history, clients will typically use this method to retrieve all of the available events, perform any processing logic and allow rendering of results. 
+This method allows the client to retrieve a specific Thread.
 
 ```proto
-message ListEventsRequest {
-    // The name of the parent history collection.
-    // Format: a2ahistories/{context_id}
+message GetThreadRequest {
+    // The resource name of the thread to retrieve.
+    string name = 1;
+    // A read mask to specify which fields to return.
+    google.protobuf.FieldMask read_mask = 3;
+}
+```
+
+#### `ListThreadEvents`
+
+This method allows the client to retrieve a paginated list of all events associated with a specific Thread. After identifying the relevant parent Thread, clients will typically use this method to retrieve all of the available events, perform any processing logic and allow rendering of results. 
+
+```proto
+message ListThreadEventsRequest {
+    // The name of the parent thread collection.
+    // Format: threads/{thread_id}
     string parent = 1;
     // The maximum number of events to return.
     int32 page_size = 2;
@@ -145,7 +146,7 @@ message ListEventsRequest {
     google.protobuf.FieldMask read_mask = 4;
 }
 
-message ListEventsResponse {
+message ListThreadEventsResponse {
     // The list of events.
     repeated A2AHistoryEvent events = 1;
     // A token to retrieve the next page of results.
