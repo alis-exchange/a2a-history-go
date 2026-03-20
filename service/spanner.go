@@ -12,16 +12,10 @@ import (
 	"github.com/alis-exchange/go-alis-build/iam/v2"
 	"github.com/google/uuid"
 	v1 "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
-	"go.alis.build/alog"
 	"go.alis.build/validation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
-)
-
-var (
-	db  *spanner.Client
-	Iam *iam.IAM
 )
 
 const (
@@ -31,9 +25,38 @@ const (
 	roleThreadAdmin  = "roles/thread.admin"
 )
 
-func init() {
-	var err error
-	Iam, err = iam.New([]*iam.Role{
+type SpannerStoreConfig struct {
+	Project      string
+	Instance     string
+	Database     string
+	DatabaseRole string
+	ThreadsTable string
+	EventsTable  string
+}
+
+var _ Service = (*SpannerService)(nil)
+
+// SpannerService is an implementation of [Service] for managing Thread and ThreadEvents via Google Cloud Spanner.
+type SpannerService struct {
+	db         *spanner.Client
+	historyTbl string
+	eventsTbl  string
+	authorizer *iam.IAM
+	v1.UnimplementedThreadServiceServer
+}
+
+func NewSpannerService(ctx context.Context, config *SpannerStoreConfig) (*SpannerService, error) {
+	dbName := fmt.Sprintf("projects/%s/instances/%s/databases/%s", config.Project, config.Instance, config.Database)
+
+	db, err := spanner.NewClientWithConfig(ctx, dbName, spanner.ClientConfig{
+		DisableNativeMetrics: true,
+		DatabaseRole:         config.DatabaseRole,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	authorizer, err := iam.New([]*iam.Role{
 		{
 			Name: roleOpen,
 			Permissions: []string{
@@ -59,45 +82,21 @@ func init() {
 		},
 	})
 	if err != nil {
-		alog.Fatalf(context.Background(), "failed to create IAM: %v", err)
-	}
-}
-
-type SpannerStoreConfig struct {
-	Project      string
-	Instance     string
-	Database     string
-	ThreadsTable string
-	EventsTable  string
-}
-
-var _ Service = (*SpannerService)(nil)
-
-// SpannerService is an implementation of [Service] for managing Thread and ThreadEvents via Google Cloud Spanner.
-type SpannerService struct {
-	db         *spanner.Client
-	historyTbl string
-	eventsTbl  string
-	v1.UnimplementedThreadServiceServer
-}
-
-func NewSpannerService(ctx context.Context, config *SpannerStoreConfig) (*SpannerService, error) {
-	dbName := fmt.Sprintf("projects/%s/instances/%s/databases/%s", config.Project, config.Instance, config.Database)
-	db, err := spanner.NewClient(ctx, dbName)
-	if err != nil {
 		return nil, err
 	}
+
 	return &SpannerService{
 		db:         db,
 		historyTbl: config.ThreadsTable,
 		eventsTbl:  config.EventsTable,
+		authorizer: authorizer,
 	}, nil
 }
 
 // GetThread implements the [Service.GetThread] method.
 func (s *SpannerService) GetThread(ctx context.Context, req *v1.GetThreadRequest) (*v1.Thread, error) {
 	// Authorize
-	az, ctx, err := Iam.NewAuthorizer(ctx)
+	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
 	}
@@ -127,7 +126,7 @@ func (s *SpannerService) GetThread(ctx context.Context, req *v1.GetThreadRequest
 // ListThreads implements the [Service.ListThreads] method.
 func (s *SpannerService) ListThreads(ctx context.Context, req *v1.ListThreadsRequest) (*v1.ListThreadsResponse, error) {
 	// Authorize
-	az, ctx, err := Iam.NewAuthorizer(ctx)
+	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
 	}
@@ -167,7 +166,7 @@ func (s *SpannerService) ListThreads(ctx context.Context, req *v1.ListThreadsReq
 
 	// make db hit and build up results
 	var resources []*v1.Thread
-	iterator := db.ReadOnlyTransaction().Query(ctx, statement)
+	iterator := s.db.ReadOnlyTransaction().Query(ctx, statement)
 	if err := iterator.Do(func(r *spanner.Row) error {
 		history := &v1.Thread{}
 		if err := r.Columns(history); err != nil {
@@ -201,7 +200,7 @@ func (s *SpannerService) ListThreadEvents(ctx context.Context, req *v1.ListThrea
 	}
 
 	// Authorize
-	az, ctx, err := Iam.NewAuthorizer(ctx)
+	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +232,7 @@ func (s *SpannerService) ListThreadEvents(ctx context.Context, req *v1.ListThrea
 	statement.Params["offset"] = offset
 
 	var events []*v1.ThreadEvent
-	iterator := db.ReadOnlyTransaction().Query(ctx, statement)
+	iterator := s.db.ReadOnlyTransaction().Query(ctx, statement)
 	err = iterator.Do(func(r *spanner.Row) error {
 		event := &v1.ThreadEvent{}
 		if err := r.ColumnByName("Event", event); err != nil {
@@ -267,7 +266,7 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 	}
 
 	// Authorize
-	az, ctx, err := Iam.NewAuthorizer(ctx)
+	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -317,13 +316,13 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 			},
 		}
 		mutation := spanner.Insert(s.historyTbl, []string{"key", "Thread", "Policy"}, []any{history.Name, history, policy})
-		if _, err := db.Apply(ctx, []*spanner.Mutation{mutation}); err != nil {
+		if _, err := s.db.Apply(ctx, []*spanner.Mutation{mutation}); err != nil {
 			return nil, err
 		}
 	}
 
 	mutation := spanner.Insert(s.eventsTbl, []string{"key", "Event"}, []any{req.GetEvent().GetName(), req.GetEvent()})
-	if _, err := db.Apply(ctx, []*spanner.Mutation{mutation}); err != nil {
+	if _, err := s.db.Apply(ctx, []*spanner.Mutation{mutation}); err != nil {
 		return nil, err
 	}
 
@@ -331,7 +330,7 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 }
 
 func (s *SpannerService) readThread(ctx context.Context, name string) (*v1.Thread, *iampb.Policy, error) {
-	row, err := db.Single().ReadRow(ctx, s.historyTbl, spanner.Key{name}, []string{"Thread", "Policy"})
+	row, err := s.db.Single().ReadRow(ctx, s.historyTbl, spanner.Key{name}, []string{"Thread", "Policy"})
 	if err != nil {
 		return nil, nil, err
 	}
