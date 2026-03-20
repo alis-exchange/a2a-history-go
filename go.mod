@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	cloud.google.com/go/iam v1.5.3
 	cloud.google.com/go/spanner v1.88.0
-	github.com/a2aproject/a2a-go v1.0.0-alpha
+	github.com/a2aproject/a2a-go/v2 v2.0.0
 	github.com/alis-exchange/go-alis-build/iam/v2 v2.2.1
 	github.com/google/uuid v1.6.0
 	go.alis.build/a2a v1.0.492

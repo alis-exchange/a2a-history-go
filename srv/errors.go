@@ -1,10 +1,11 @@
-package a2ahistory
+package srv
 
 import (
 	"errors"
 	"fmt"
 )
 
+// JSONRPCError is a JSON-RPC 2.0 error.
 type JSONRPCError interface {
 	Error() string
 	Is(target error) bool
@@ -33,15 +34,18 @@ type ErrInvalidRequest struct {
 	err error
 }
 
+// Error returns the error message.
 func (e ErrInvalidRequest) Error() string {
 	return fmt.Sprintf("invalid request: %v", e.err)
 }
 
+// Is checks if the error is an ErrInvalidRequest.
 func (e ErrInvalidRequest) Is(target error) bool {
 	var errInvalidRequest ErrInvalidRequest
 	return errors.As(target, &errInvalidRequest) || errors.Is(e.err, target)
 }
 
+// JSONRPCErrorObject returns a JSON-RPC 2.0 error object.
 func (e ErrInvalidRequest) JSONRPCErrorObject() *jsonrpcErrorObject {
 	return &jsonrpcErrorObject{
 		Code:    -32600,

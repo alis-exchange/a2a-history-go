@@ -2,10 +2,11 @@ package srv
 
 import (
 	"fmt"
-	"github.com/a2aproject/a2a-go/a2a"
+
+	"github.com/a2aproject/a2a-go/v2/a2a"
+	a2apb "go.alis.build/a2a/lf/a2a/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	a2apb "go.alis.build/a2a/lf/a2a/v1"
 )
 
 func toProtoTask(task *a2a.Task) (*a2apb.Task, error) {
@@ -122,7 +123,7 @@ func toProtoMessage(msg *a2a.Message) (*a2apb.Message, error) {
 	}
 
 	var taskIDs []string
-	if msg.ReferenceTasks != nil {
+	if len(msg.ReferenceTasks) > 0 {
 		taskIDs = make([]string, len(msg.ReferenceTasks))
 		for i, tid := range msg.ReferenceTasks {
 			taskIDs[i] = string(tid)
@@ -130,13 +131,13 @@ func toProtoMessage(msg *a2a.Message) (*a2apb.Message, error) {
 	}
 
 	return &a2apb.Message{
-		MessageId: msg.ID,
-		ContextId: msg.ContextID,
-		TaskId: string(msg.TaskID),
-		Role: toProtoRole(msg.Role),
-		Parts: parts,
-		Metadata: meta,
-		Extensions: msg.Extensions,
+		MessageId:        msg.ID,
+		ContextId:        msg.ContextID,
+		TaskId:           string(msg.TaskID),
+		Role:             toProtoRole(msg.Role),
+		Parts:            parts,
+		Metadata:         meta,
+		Extensions:       msg.Extensions,
 		ReferenceTaskIds: taskIDs,
 	}, nil
 }
@@ -161,6 +162,8 @@ func toProtoPart(part *a2a.Part) (*a2apb.Part, error) {
 		return toProtoDataPart(part)
 	case a2a.Raw:
 		return toProtoFilePart(part)
+	case a2a.URL:
+		return toProtoURLPart(part)
 	default:
 		return nil, fmt.Errorf("unsupported part type: %T", p)
 	}
@@ -190,7 +193,7 @@ func toProtoDataPart(part *a2a.Part) (*a2apb.Part, error) {
 		return nil, err
 	}
 	return &a2apb.Part{
-		Content:   &a2apb.Part_Data{
+		Content: &a2apb.Part_Data{
 			Data: data,
 		},
 		Metadata: metadata,
@@ -209,6 +212,22 @@ func toProtoFilePart(part *a2a.Part) (*a2apb.Part, error) {
 		Metadata:  metadata,
 		Filename:  part.Filename,
 		MediaType: part.MediaType,
+	}, nil
+}
+
+func toProtoURLPart(part *a2a.Part) (*a2apb.Part, error) {
+	metadata, err := toProtoStruct(part.Metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	return &a2apb.Part{
+		Content: &a2apb.Part_Url{
+			Url: string(part.URL()),
+		},
+		Metadata:  metadata,
+		MediaType: part.MediaType,
+		Filename:  part.Filename,
 	}, nil
 }
 
@@ -258,7 +277,7 @@ func toProtoTaskStatus(status a2a.TaskStatus) (*a2apb.TaskStatus, error) {
 	}
 
 	pStatus := &a2apb.TaskStatus{
-		State:  toProtoTaskState(status.State),
+		State:   toProtoTaskState(status.State),
 		Message: message,
 	}
 	if status.Timestamp != nil {

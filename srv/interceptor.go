@@ -4,35 +4,42 @@ import (
 	"context"
 	"slices"
 	"sync"
-	"github.com/a2aproject/a2a-go/a2a"
-	"github.com/a2aproject/a2a-go/a2asrv"
-	"go.alis.build/a2a/extension/history/service"
-	"go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
+
+	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/google/uuid"
+	v1 "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
+	"go.alis.build/a2a/extension/history/service"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	
 )
 
+type invocationKeyType struct{}
+
+func (k invocationKeyType) String() string {
+	return "a2a-extension-history-invocation-id"
+}
+
+var invocationKey = invocationKeyType{}
+
 const (
-	invocationKey = "a2a-extension-history-invocation-id"
-	extensionUri = "https://github.com/alis-exchange/a2a-history-go/alis/a2a/extension/history/v1"
+	extensionURI = "https://github.com/alis-exchange/a2a-history-go/alis/a2a/extension/history/v1"
 )
 
 var _ a2asrv.CallInterceptor = (*interceptor)(nil)
 
 type interceptor struct {
-	service  service.Service
-	agentID  string
-	mu       sync.Mutex
-	store    map[string]*v1.ThreadEvent
+	service service.Service
+	agentID string
+	mu      sync.Mutex
+	store   map[string]*v1.ThreadEvent
 }
 
 // Creates a new call interceptor satisfying the [a2asrv.CallInterceptor] interface.
 // For details, seee https://github.com/a2aproject/a2a-go/blob/main/a2asrv/middleware.go
-func NewInterceptor(service service.Service) *interceptor{
+func NewInterceptor(service service.Service) *interceptor {
 	return &interceptor{
 		service: service,
-		//agentID: agentID,
+		// agentID: agentID,
 		store: make(map[string]*v1.ThreadEvent),
 	}
 }
@@ -40,12 +47,12 @@ func NewInterceptor(service service.Service) *interceptor{
 // Before allows to observe and modify the request.
 func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, req *a2asrv.Request) (context.Context, any, error) {
 	// Check incoming request for extension activation
-	if !slices.Contains(callCtx.Extensions().RequestedURIs(), extensionUri) {
+	if !slices.Contains(callCtx.Extensions().RequestedURIs(), extensionURI) {
 		return ctx, nil, nil
 	}
 
 	// Activate the extension
-	callCtx.Extensions().Activate(&a2a.AgentExtension{URI: extensionUri})
+	callCtx.Extensions().Activate(&a2a.AgentExtension{URI: extensionURI})
 
 	// Handle incoming event payload type
 	var event *v1.ThreadEvent
@@ -56,7 +63,7 @@ func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, r
 			return ctx, nil, err
 		}
 		event = &v1.ThreadEvent{
-			Payload: &v1.ThreadEvent_Message{Message: message},
+			Payload:    &v1.ThreadEvent_Message{Message: message},
 			CreateTime: timestamppb.Now(),
 		}
 
@@ -71,21 +78,21 @@ func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, r
 	}
 
 	// Capture Event
-	 _, err := i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
-		Event: 		event,
-		AgentId: 	i.agentID,
+	_, err := i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
+		Event:   event,
+		AgentId: i.agentID,
 	})
 	if err != nil {
 		return ctx, nil, err
 	}
 
-	return ctx, nil , nil
+	return ctx, nil, nil
 }
 
 // After allows to observe and modify the response.
 func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, resp *a2asrv.Response) error {
 	// Check that the extension is active
-	if !callCtx.Extensions().Active(&a2a.AgentExtension{URI: extensionUri}) {
+	if !callCtx.Extensions().Active(&a2a.AgentExtension{URI: extensionURI}) {
 		return nil
 	}
 
@@ -101,7 +108,7 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			return err
 		}
 		event = &v1.ThreadEvent{
-			Payload: &v1.ThreadEvent_Task{Task: task},
+			Payload:    &v1.ThreadEvent_Task{Task: task},
 			CreateTime: timestamppb.Now(),
 		}
 	case *a2a.Message:
@@ -111,7 +118,7 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			return err
 		}
 		event = &v1.ThreadEvent{
-			Payload: &v1.ThreadEvent_Message{Message: message},
+			Payload:    &v1.ThreadEvent_Message{Message: message},
 			CreateTime: timestamppb.Now(),
 		}
 	case *a2a.TaskStatusUpdateEvent:
@@ -121,7 +128,7 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			return err
 		}
 		event = &v1.ThreadEvent{
-			Payload: &v1.ThreadEvent_StatusUpdate{StatusUpdate: statusUpdate},
+			Payload:    &v1.ThreadEvent_StatusUpdate{StatusUpdate: statusUpdate},
 			CreateTime: timestamppb.Now(),
 		}
 	case *a2a.TaskArtifactUpdateEvent:
@@ -131,19 +138,19 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			return err
 		}
 		event = &v1.ThreadEvent{
-			Payload: &v1.ThreadEvent_ArtifactUpdate{ArtifactUpdate: artifactUpdate},
+			Payload:    &v1.ThreadEvent_ArtifactUpdate{ArtifactUpdate: artifactUpdate},
 			CreateTime: timestamppb.Now(),
 		}
 	}
-    
+
 	// Check for invocationID and any cached events to be captured
-    invocationID, ok := ctx.Value(invocationKey).(string)
+	invocationID, ok := ctx.Value(invocationKey).(string)
 	if ok {
 		if event, found := i.store[invocationID]; found {
 			event.Payload.(*v1.ThreadEvent_Message).Message.ContextId = contextID
 			_, err := i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
-				Event: 	  event,
-				AgentId:  i.agentID,
+				Event:   event,
+				AgentId: i.agentID,
 			})
 			if err != nil {
 				return err
@@ -154,8 +161,8 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 
 	// Capture the event
 	_, err := i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
-		Event: 		event,
-		AgentId: 	i.agentID,
+		Event:   event,
+		AgentId: i.agentID,
 	})
 	if err != nil {
 		return err
