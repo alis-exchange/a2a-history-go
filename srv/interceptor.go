@@ -34,13 +34,29 @@ type interceptor struct {
 	store   map[string]*v1.ThreadEvent
 }
 
-// Creates a new call interceptor satisfying the [a2asrv.CallInterceptor] interface.
-// For details, seee https://github.com/a2aproject/a2a-go/blob/main/a2asrv/middleware.go
-func NewInterceptor(service service.Service) *interceptor {
+type InterceptorOptions struct {
+	AgentID string
+}
+
+type InterceptorOption func(*InterceptorOptions)
+
+func WithAgentID(agentID string) InterceptorOption {
+	return func(o *InterceptorOptions) {
+		o.AgentID = agentID
+	}
+}
+
+// NewInterceptor Creates a new call interceptor satisfying the [a2asrv.CallInterceptor] interface.
+// For details, see https://github.com/a2aproject/a2a-go/blob/main/a2asrv/middleware.go
+func NewInterceptor(service service.Service, opts ...InterceptorOption) *interceptor {
+	options := &InterceptorOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
 	return &interceptor{
 		service: service,
-		// agentID: agentID,
-		store: make(map[string]*v1.ThreadEvent),
+		agentID: options.AgentID,
+		store:   make(map[string]*v1.ThreadEvent),
 	}
 }
 
@@ -54,36 +70,52 @@ func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, r
 	// Activate the extension
 	callCtx.Extensions().Activate(&a2a.AgentExtension{URI: extensionURI})
 
-	// Handle incoming event payload type
-	var event *v1.ThreadEvent
-	switch p := req.Payload.(type) {
-	case *a2a.SendMessageRequest:
-		message, err := toProtoMessage(p.Message)
-		if err != nil {
-			return ctx, nil, err
-		}
-		event = &v1.ThreadEvent{
-			Payload:    &v1.ThreadEvent_Message{Message: message},
-			CreateTime: timestamppb.Now(),
-		}
-
-		// Defer event creation to "After" if contextID not currently known.
-		// We track a unique "invocationID" to retrieve the corresponding event later.
-		if p.Message.ContextID == "" {
-			invocationID := uuid.New().String()
-			newCtx := context.WithValue(ctx, invocationKey, invocationID)
-			i.cache(invocationID, event)
-			return newCtx, nil, nil
-		}
+	// Check if payload is nil
+	if req.Payload == nil {
+		return ctx, nil, nil
 	}
 
-	// Capture Event
-	_, err := i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
-		Event:   event,
-		AgentId: i.agentID,
-	})
-	if err != nil {
-		return ctx, nil, err
+	// Handle incoming event payload type
+	switch p := req.Payload.(type) {
+	case *a2a.SendMessageRequest:
+		{
+			// Check if message is nil
+			if p == nil || p.Message == nil {
+				return ctx, nil, nil
+			}
+
+			// Convert message to proto
+			message, err := toProtoMessage(p.Message)
+			if err != nil {
+				return ctx, nil, err
+			}
+
+			// Initialize event
+			event := &v1.ThreadEvent{
+				Payload:    &v1.ThreadEvent_Message{Message: message},
+				CreateTime: timestamppb.Now(),
+			}
+
+			// Defer event creation to "After" if contextID not currently known.
+			// We track a unique "invocationID" to retrieve the corresponding event later.
+			if p.Message.ContextID == "" {
+				invocationID := uuid.New().String()
+				newCtx := context.WithValue(ctx, invocationKey, invocationID)
+				i.cache(invocationID, event)
+				return newCtx, nil, nil
+			}
+
+			// Capture Event
+			_, err = i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
+				Event:   event,
+				AgentId: i.agentID,
+			})
+			if err != nil {
+				return ctx, nil, err
+			}
+		}
+	default:
+		return ctx, nil, nil
 	}
 
 	return ctx, nil, nil
@@ -102,61 +134,78 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 	var event *v1.ThreadEvent
 	switch p := resp.Payload.(type) {
 	case *a2a.Task:
-		contextID = p.ContextID
-		task, err := toProtoTask(p)
-		if err != nil {
-			return err
-		}
-		event = &v1.ThreadEvent{
-			Payload:    &v1.ThreadEvent_Task{Task: task},
-			CreateTime: timestamppb.Now(),
+		if p != nil {
+			contextID = p.ContextID
+			task, err := toProtoTask(p)
+			if err != nil {
+				return err
+			}
+			event = &v1.ThreadEvent{
+				Payload:    &v1.ThreadEvent_Task{Task: task},
+				CreateTime: timestamppb.Now(),
+			}
 		}
 	case *a2a.Message:
-		contextID = p.ContextID
-		message, err := toProtoMessage(p)
-		if err != nil {
-			return err
-		}
-		event = &v1.ThreadEvent{
-			Payload:    &v1.ThreadEvent_Message{Message: message},
-			CreateTime: timestamppb.Now(),
+		if p != nil {
+			contextID = p.ContextID
+			message, err := toProtoMessage(p)
+			if err != nil {
+				return err
+			}
+			event = &v1.ThreadEvent{
+				Payload:    &v1.ThreadEvent_Message{Message: message},
+				CreateTime: timestamppb.Now(),
+			}
 		}
 	case *a2a.TaskStatusUpdateEvent:
-		contextID = p.ContextID
-		statusUpdate, err := toProtoTaskStatusUpdate(p)
-		if err != nil {
-			return err
-		}
-		event = &v1.ThreadEvent{
-			Payload:    &v1.ThreadEvent_StatusUpdate{StatusUpdate: statusUpdate},
-			CreateTime: timestamppb.Now(),
+		if p != nil {
+			contextID = p.ContextID
+			statusUpdate, err := toProtoTaskStatusUpdate(p)
+			if err != nil {
+				return err
+			}
+			event = &v1.ThreadEvent{
+				Payload:    &v1.ThreadEvent_StatusUpdate{StatusUpdate: statusUpdate},
+				CreateTime: timestamppb.Now(),
+			}
 		}
 	case *a2a.TaskArtifactUpdateEvent:
-		contextID = p.ContextID
-		artifactUpdate, err := toProtoTaskArtifacteUpdate(p)
-		if err != nil {
-			return err
-		}
-		event = &v1.ThreadEvent{
-			Payload:    &v1.ThreadEvent_ArtifactUpdate{ArtifactUpdate: artifactUpdate},
-			CreateTime: timestamppb.Now(),
+		if p != nil {
+			contextID = p.ContextID
+			artifactUpdate, err := toProtoTaskArtifacteUpdate(p)
+			if err != nil {
+				return err
+			}
+			event = &v1.ThreadEvent{
+				Payload:    &v1.ThreadEvent_ArtifactUpdate{ArtifactUpdate: artifactUpdate},
+				CreateTime: timestamppb.Now(),
+			}
 		}
 	}
 
 	// Check for invocationID and any cached events to be captured
 	invocationID, ok := ctx.Value(invocationKey).(string)
 	if ok {
-		if event, found := i.store[invocationID]; found {
-			event.Payload.(*v1.ThreadEvent_Message).Message.ContextId = contextID
-			_, err := i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
-				Event:   event,
-				AgentId: i.agentID,
-			})
-			if err != nil {
-				return err
+		if ev, found := i.peekCached(invocationID); found {
+			p, ok := ev.Payload.(*v1.ThreadEvent_Message)
+			if ok && p != nil && p.Message != nil && contextID != "" {
+				// Update the contextID
+				p.Message.ContextId = contextID
+				_, err := i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
+					Event:   ev,
+					AgentId: i.agentID,
+				})
+				if err != nil {
+					return err
+				}
+				i.popCached(invocationID)
 			}
-			i.clear(invocationID)
 		}
+	}
+
+	// If no event was captured, return nil
+	if event == nil {
+		return nil
 	}
 
 	// Capture the event
@@ -177,7 +226,14 @@ func (i *interceptor) cache(invocationID string, event *v1.ThreadEvent) {
 	i.store[invocationID] = event
 }
 
-func (i *interceptor) clear(invocationID string) {
+func (i *interceptor) peekCached(invocationID string) (*v1.ThreadEvent, bool) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	ev, ok := i.store[invocationID]
+	return ev, ok
+}
+
+func (i *interceptor) popCached(invocationID string) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	delete(i.store, invocationID)

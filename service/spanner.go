@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
@@ -156,8 +155,8 @@ func (s *SpannerService) ListThreads(ctx context.Context, req *v1.ListThreadsReq
 	}
 	statement.Params["limit"] = limit
 	offset := 0
-	if req.PageToken != "" {
-		offset, err = strconv.Atoi(req.PageToken)
+	if req.GetPageToken() != "" {
+		offset, err = strconv.Atoi(req.GetPageToken())
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "invalid page token")
 		}
@@ -288,6 +287,7 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 	if ctxID == "" {
 		return nil, err
 	}
+
 	historyName := fmt.Sprintf("threads/%s", ctxID)
 	req.GetEvent().Name = fmt.Sprintf("%s/events/%s", historyName, uuid.NewString())
 
@@ -296,8 +296,9 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 	}
 
 	// insert Thread resource if missing
+	var mutations []*spanner.Mutation
 	if _, _, err := s.readThread(ctx, historyName); err != nil {
-		if !strings.Contains(err.Error(), "row not found") {
+		if spanner.ErrCode(err) != codes.NotFound {
 			return nil, err
 		}
 		now := time.Now().UTC()
@@ -315,14 +316,21 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 				},
 			},
 		}
-		mutation := spanner.Insert(s.historyTbl, []string{"key", "Thread", "Policy"}, []any{history.Name, history, policy})
-		if _, err := s.db.Apply(ctx, []*spanner.Mutation{mutation}); err != nil {
-			return nil, err
-		}
+		mutation := spanner.Insert(s.historyTbl, []string{"key", "Thread", "Policy"}, []any{history.GetName(), history, policy})
+		mutations = append(mutations, mutation)
+
 	}
 
 	mutation := spanner.Insert(s.eventsTbl, []string{"key", "Event"}, []any{req.GetEvent().GetName(), req.GetEvent()})
-	if _, err := s.db.Apply(ctx, []*spanner.Mutation{mutation}); err != nil {
+	mutations = append(mutations, mutation)
+
+	// Apply mutations in a single transaction
+	if _, err := s.db.ReadWriteTransaction(ctx, func(ctx context.Context, rwt *spanner.ReadWriteTransaction) error {
+		if err := rwt.BufferWrite(mutations); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
