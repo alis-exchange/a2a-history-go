@@ -3,7 +3,7 @@
 // Source: alis/a2a/extension/history/v1/history.proto
 // Plugin version: v0.0.1
 //
-// Generated on: 2026-03-20 12:11:51 UTC
+// Generated on: 2026-03-20 12:37:40 UTC
 
 package v1
 
