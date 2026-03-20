@@ -2,61 +2,89 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-This project contains a lightweight Go library for developers supporting the the [a2a-history](spec.md) A2A extension.
+This project contains a lightweight Go library for developers supporting the [a2a-history](spec.md) A2A extension.
 
-## ✨ Features
+## Features
 
-- **Integration with the offical [A2A Go SDK](https://github.com/a2aproject/a2a-go/tree/main):** Builds on top of the official library for building A2A-compliant Agents in Go.
-- **Extensible:** Easily add support and customise for different database backend implementations.
+- **Integration with the official [A2A Go SDK](https://github.com/a2aproject/a2a-go/tree/main):** Builds on top of the official library for building A2A-compliant agents in Go.
+- **Extensible:** Add or swap database backends by implementing [`service.Service`](service/service.go).
+- **Two integration points:** A [`srv`](srv/) **call interceptor** (records traffic as your agent runs) and an optional **JSON-RPC** HTTP handler for querying history from clients.
 
-## 🚀 Installation
+## Packages
 
-To install `a2a-history-go` to your project, run:
+| Package                                                   | Role                                                                                                                                                                                                                                                                                         |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`go.alis.build/a2a/extension/history/service`](service/) | [`Service`](service/service.go) interface and [`SpannerService`](service/spanner.go) (Google Cloud Spanner + IAM).                                                                                                                                                                           |
+| [`go.alis.build/a2a/extension/history/srv`](srv/)         | [`NewInterceptor`](srv/interceptor.go) ([`a2asrv.CallInterceptor`](https://pkg.go.dev/github.com/a2aproject/a2a-go/v2/a2asrv#CallInterceptor)), [`NewJSONRPCHandler`](srv/jsonrpc.go), A2A→proto conversions ([`pbconv.go`](srv/pbconv.go)), JSON-RPC errors ([`errors.go`](srv/errors.go)). |
+
+Package-level documentation (design, IAM roles, interceptor flow) lives in [`service/docs.go`](service/docs.go) and [`srv/docs.go`](srv/docs.go). Run `go doc -all ./...` locally for the full commentary.
+
+## Architecture (high level)
+
+```mermaid
+flowchart LR
+  subgraph agent [A2A server]
+    H[a2asrv.Handler]
+    EX[Agent executor]
+    I[history Interceptor]
+    H --> I
+    I --> EX
+  end
+  subgraph storage [Persistence]
+    S[service.Service]
+    DB[(Spanner)]
+    S --> DB
+  end
+  I -->|AppendThreadEvent| S
+  subgraph api [Optional HTTP]
+    J[JSON-RPC handler]
+    J -->|GetThread / List*| S
+  end
+```
+
+1. **Interceptor path:** On each RPC, `Before` activates the history extension when the client requested it, converts `SendMessage` payloads to `ThreadEvent`s, and either appends immediately or defers until `After` has a `ContextID` from the response. `After` appends response-shaped events (task, message, status, artifact updates) and may append twice when a deferred user message is flushed first.
+2. **JSON-RPC path:** Browsers or tools call `GetThread`, `ListThreads`, `ListThreadEvents` over JSON-RPC 2.0 POST; the same `Service` backs reads.
+
+## Installation
 
 ```bash
 go get -u go.alis.build/a2a/extension/history
 ```
 
-## 🛠️ Getting Started
+## Getting started
 
-### History Service
+### History service
 
-For advanced developers wishing to have total flexibiliy and control over the backend storage solution used to persist A2A events, `a2a-history-go` exposes the `Service` interface which must be satisfied and implemented:
+For full control over storage, implement [`service.Service`](service/service.go):
 
 ```go
 type Service interface {
-	// GetThread
 	GetThread(ctx context.Context, req *v1.GetThreadRequest) (*v1.Thread, error)
-	// ListThreads
 	ListThreads(ctx context.Context, req *v1.ListThreadsRequest) (*v1.ListThreadsResponse, error)
-	// ListThreadEvents
 	ListThreadEvents(ctx context.Context, req *v1.ListThreadEventsRequest) (*v1.ListThreadEventsResponse, error)
-	// AppendThreadEvent
 	AppendThreadEvent(ctx context.Context, req *v1.AppendThreadEventRequest) (*v1.AppendThreadEventResponse, error)
 }
 ```
 
-Alternatively, developers may choose to use any of the pre-built Service implementations. Currently, only the `SpannerService` implementation is available, which integrates with Google Cloud Spanner and the Alis Build ecosystem:
+Alternatively, use the built-in Spanner implementation:
 
 ```go
-
 import (
 	"go.alis.build/a2a/extension/history/service"
 )
 
 historyService, err := service.NewSpannerService(ctx, &service.SpannerStoreConfig{
-	    // TODO: Complete with your values.
-		Project:      "SPANNER_PROJECT_NAME",
-		Instance:     "SPANNER_INSTANCE_NAME",
-		Database:     "SPANNER_DATABASE_NAME",
-		ThreadsTable: "THREADS_TABLE_NAME",
-		EventsTable:  "EVENTS_TABLE_NAME"
+	Project:      "SPANNER_PROJECT_NAME",
+	Instance:     "SPANNER_INSTANCE_NAME",
+	Database:     "SPANNER_DATABASE_NAME",
+	ThreadsTable: "THREADS_TABLE_NAME",
+	EventsTable:  "EVENTS_TABLE_NAME",
 })
 ```
 
-Below is the corresponding Terraform resource configuration that must be used for compatibility with the `SpannerService`.
+Below is Terraform aligned with `SpannerService` expectations (proto columns, foreign key).
 
-```
+```hcl
 resource "alis_google_spanner_table" "a2a_thread" {
   project         = "SPANNER_PROJECT_NAME"
   instance        = "SPANNER_INSTANCE_NAME"
@@ -77,7 +105,7 @@ resource "alis_google_spanner_table" "a2a_thread" {
         required      = true
       },
       {
-        name          = "Policy"
+        name          = "Policy",
         type          = "PROTO"
         proto_package = "google.iam.v1.Policy"
         required      = true
@@ -87,7 +115,7 @@ resource "alis_google_spanner_table" "a2a_thread" {
         type            = "TIMESTAMP",
         required        = false,
         is_computed     = true,
-        computation_ddl = "TIMESTAMP_ADD(TIMESTAMP_SECONDS(Thread.create_time.seconds),INTERVAL CAST(FLOOR(History.create_time.nanos / 1000) AS INT64) MICROSECOND)",
+        computation_ddl = "TIMESTAMP_ADD(TIMESTAMP_SECONDS(Thread.create_time.seconds),INTERVAL CAST(FLOOR(Thread.create_time.nanos / 1000) AS INT64) MICROSECOND)",
         is_stored       = true
       },
     ]
@@ -144,43 +172,41 @@ resource "alis_google_spanner_table_foreign_key" "a2a_thread_events_fk" {
   referenced_column = "key"
   on_delete         = "CASCADE"
 }
-
 ```
 
-### Registering the custom CallInterceptor
+### Registering the call interceptor
 
-Registering the custom CallInterceptor on the requestHandler manages extension activation and capturing of A2A events as they are generated by the AgentExecutor.
+Wire the interceptor into the A2A request handler so history is recorded as the executor runs:
 
 ```go
-
 import (
-  "github.com/a2aproject/a2a-go/v2/a2asrv"
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"go.alis.build/a2a/extension/history/srv"
 )
 
-// Add CallInterceptor to A2A Server's request handler
 requestHandler := a2asrv.NewHandler(
-		&agentExecutor{},
-		...
-		a2asrv.WithCallInterceptor(serv.NewInterceptor(historyService),
+	&agentExecutor{},
+	// ... other options ...
+	a2asrv.WithCallInterceptor(srv.NewInterceptor(historyService, srv.WithAgentID("my-agent-id"))),
 )
 ```
 
-Or, if using your own custom Service implementation:
+With a custom `Service` implementation:
 
 ```go
+var myCustomService service.Service = &MyCustomHistoryService{}
 
-import (
-  "github.com/a2aproject/a2a-go/v2/a2asrv"
-	"go.alis.build/a2a/extension/history/srv"
-)
-
-var MyCustomService = MyCustomHistoryService{} // MyCustomService implements the Service interface
-
-// Add CallInterceptor to A2A Server\s request handler
 requestHandler := a2asrv.NewHandler(
-		&agentExecutor{},
-		...
-		a2asrv.WithCallInterceptor(srv.NewInterceptor(MyCustomService)),
-	)
+	&agentExecutor{},
+	a2asrv.WithCallInterceptor(srv.NewInterceptor(myCustomService)),
+)
 ```
+
+### JSON-RPC handler (optional)
+
+Expose history reads over HTTP using [`srv.NewJSONRPCHandler`](srv/jsonrpc.go); mount at [`srv.HistoryExtensionPath`](srv/jsonrpc.go) or your chosen route.
+
+## Documentation
+
+- See [`service/docs.go`](service/docs.go) and [`srv/docs.go`](srv/docs.go) for method-level flows, IAM roles, and interceptor semantics.
+- Proto definitions: `alis/a2a/extension/history/v1` in this module.

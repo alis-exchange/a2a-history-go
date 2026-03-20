@@ -34,20 +34,28 @@ type interceptor struct {
 	store   map[string]*v1.ThreadEvent
 }
 
+// InterceptorOptions configures [NewInterceptor].
 type InterceptorOptions struct {
+	// AgentID is stored on appended events and on auto-created threads (see AppendThreadEvent on the storage implementation).
 	AgentID string
 }
 
+// InterceptorOption mutates [InterceptorOptions] when passed to [NewInterceptor].
 type InterceptorOption func(*InterceptorOptions)
 
+// WithAgentID sets the agent identifier recorded on history writes.
 func WithAgentID(agentID string) InterceptorOption {
 	return func(o *InterceptorOptions) {
 		o.AgentID = agentID
 	}
 }
 
-// NewInterceptor Creates a new call interceptor satisfying the [a2asrv.CallInterceptor] interface.
-// For details, see https://github.com/a2aproject/a2a-go/blob/main/a2asrv/middleware.go
+// NewInterceptor returns an [a2asrv.CallInterceptor] that records history by calling service for each
+// relevant request/response. Pass [WithAgentID] so persisted threads/events include your agent id.
+//
+// See package documentation for Before/After behavior and deferred SendMessage handling.
+//
+// A2A middleware: https://github.com/a2aproject/a2a-go/blob/main/a2asrv/middleware.go
 func NewInterceptor(service service.Service, opts ...InterceptorOption) *interceptor {
 	options := &InterceptorOptions{}
 	for _, opt := range opts {
@@ -60,7 +68,9 @@ func NewInterceptor(service service.Service, opts ...InterceptorOption) *interce
 	}
 }
 
-// Before allows to observe and modify the request.
+// Before implements [a2asrv.CallInterceptor]: activates the history extension when requested, and for
+// SendMessage requests either appends immediately (when context id is present) or caches the event
+// and stores an invocation id on the returned context when context id is empty.
 func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, req *a2asrv.Request) (context.Context, any, error) {
 	// Check incoming request for extension activation
 	if !slices.Contains(callCtx.Extensions().RequestedURIs(), extensionURI) {
@@ -121,7 +131,8 @@ func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, r
 	return ctx, nil, nil
 }
 
-// After allows to observe and modify the response.
+// After implements [a2asrv.CallInterceptor]: maps the response payload to a ThreadEvent, optionally
+// flushes a deferred SendMessage using the response context id, then appends the response event when present.
 func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, resp *a2asrv.Response) error {
 	// Check that the extension is active
 	if !callCtx.Extensions().Active(&a2a.AgentExtension{URI: extensionURI}) {
@@ -220,12 +231,14 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 	return nil
 }
 
+// cache stores a deferred ThreadEvent keyed by invocation id until After can fill context id.
 func (i *interceptor) cache(invocationID string, event *v1.ThreadEvent) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.store[invocationID] = event
 }
 
+// peekCached returns the cached event without removing it (used before append in After).
 func (i *interceptor) peekCached(invocationID string) (*v1.ThreadEvent, bool) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -233,6 +246,7 @@ func (i *interceptor) peekCached(invocationID string) (*v1.ThreadEvent, bool) {
 	return ev, ok
 }
 
+// popCached deletes a key after a successful deferred append.
 func (i *interceptor) popCached(invocationID string) {
 	i.mu.Lock()
 	defer i.mu.Unlock()

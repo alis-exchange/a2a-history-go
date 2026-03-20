@@ -18,7 +18,8 @@ const (
 	methodGetThread        = "GetThread"
 	methodListThreads      = "ListThreads"
 	methodListThreadEvents = "ListThreadEvents"
-	HistoryExtensionPath   = "/extensions/a2ahistory"
+	// HistoryExtensionPath is the default HTTP path segment for mounting [NewJSONRPCHandler].
+	HistoryExtensionPath = "/extensions/a2ahistory"
 )
 
 var (
@@ -51,6 +52,8 @@ type jsonrpcHandler struct {
 	service service.Service
 }
 
+// ServeHTTP handles a single JSON-RPC 2.0 call: POST only, decodes body, validates version and id,
+// dispatches to GetThread / ListThreads / ListThreadEvents, and writes JSON result or error.
 func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 
@@ -88,6 +91,7 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	h.handleRequest(ctx, rw, &payload)
 }
 
+// handleRequest runs after top-level validation and encodes success or delegates to [jsonrpcHandler.writeJSONRPCError].
 func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWriter, req *jsonrpcRequest) {
 	var result any
 	var err error
@@ -155,6 +159,8 @@ func (h *jsonrpcHandler) writeJSONRPCError(ctx context.Context, rw http.Response
 	}
 }
 
+// NewJSONRPCHandler returns an [http.Handler] that implements JSON-RPC 2.0 for the history API
+// (ListThreads, GetThread, ListThreadEvents). The service must implement [service.Service].
 func NewJSONRPCHandler(service service.Service) http.Handler {
 	return &jsonrpcHandler{
 		service: service,

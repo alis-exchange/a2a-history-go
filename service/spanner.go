@@ -24,13 +24,14 @@ const (
 	roleThreadAdmin  = "roles/thread.admin"
 )
 
+// SpannerStoreConfig selects the Spanner database and table names used by [SpannerService].
 type SpannerStoreConfig struct {
-	Project      string
-	Instance     string
-	Database     string
-	DatabaseRole string
-	ThreadsTable string
-	EventsTable  string
+	Project      string // GCP project id
+	Instance     string // Spanner instance id
+	Database     string // Spanner database id
+	DatabaseRole string // optional Spanner database role for fine-grained access (empty if unused)
+	ThreadsTable string // table storing Thread + IAM Policy proto columns
+	EventsTable  string // table storing ThreadEvent proto rows (keys scoped under a thread)
 }
 
 var _ Service = (*SpannerService)(nil)
@@ -44,6 +45,8 @@ type SpannerService struct {
 	v1.UnimplementedThreadServiceServer
 }
 
+// NewSpannerService constructs a [SpannerService] with a Spanner client and IAM authorizer wired to
+// the ThreadService RPC names used by this module.
 func NewSpannerService(ctx context.Context, config *SpannerStoreConfig) (*SpannerService, error) {
 	dbName := fmt.Sprintf("projects/%s/instances/%s/databases/%s", config.Project, config.Instance, config.Database)
 
@@ -337,6 +340,8 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 	return &v1.AppendThreadEventResponse{}, nil
 }
 
+// readThread loads the Thread and Policy columns for a thread primary key, or returns the Spanner error
+// (typically NotFound if the row does not exist).
 func (s *SpannerService) readThread(ctx context.Context, name string) (*v1.Thread, *iampb.Policy, error) {
 	row, err := s.db.Single().ReadRow(ctx, s.historyTbl, spanner.Key{name}, []string{"Thread", "Policy"})
 	if err != nil {
