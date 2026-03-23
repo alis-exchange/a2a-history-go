@@ -6,6 +6,9 @@
 //
 //   - [NewJSONRPCHandler] exposes JSON-RPC 2.0 methods (GetThread, ListThreads, ListThreadEvents)
 //     over HTTP POST, delegating to the same [service.Service] used by storage-aware agents.
+//     Optional [WithCORS] enables browser cross-origin access. Params and results use protojson
+//     (camelCase JSON on the wire; unknown fields discarded on input; unpopulated fields emitted on output).
+//     gRPC status errors from the service are mapped to JSON-RPC error responses with appropriate codes.
 //
 //   - Conversion helpers in pbconv.go map [github.com/a2aproject/a2a-go/v2/a2a] types to the
 //     protobuf shapes stored in history (a2a Laminar federation protos).
@@ -32,7 +35,11 @@
 //
 // # JSON-RPC handler
 //
-// POST-only. Decodes JSON-RPC 2.0, validates jsonrpc version and non-empty id, dispatches by method name,
-// unmarshals params into protobuf request types, and returns result or a JSON-RPC error ([JSONRPCError]).
+// POST-only (plus OPTIONS when [WithCORS] is set). Decodes JSON-RPC 2.0, validates jsonrpc version and
+// non-empty id, dispatches by method name, unmarshals params into protobuf request types with protojson
+// (DiscardUnknown on decode for forward compatibility), and returns a result or error.
+// Success responses embed the protobuf message as JSON in the JSON-RPC result field (protojson encode).
+// Errors are encoded as [JSONRPCError]; when the service returns a gRPC status, standard codes such as
+// InvalidArgument and NotFound map to JSON-RPC error codes in the -326xx and -320xx ranges.
 // Mount the handler at [HistoryExtensionPath] (or a path your gateway uses consistently).
 package srv

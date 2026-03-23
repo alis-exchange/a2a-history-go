@@ -28,13 +28,15 @@ const (
 )
 
 var (
-	// JSONRPC Errors
+	// jsonrpcMarshaler encodes protobuf results in the JSON-RPC envelope (camelCase JSON names,
+	// default protojson behavior; EmitUnpopulated so clients see stable field shapes).
 	jsonrpcMarshaler = protojson.MarshalOptions{
 		UseProtoNames:   false,
 		EmitUnpopulated: true,
 	}
+	// jsonrpcUnmarshaler decodes params into request protos; DiscardUnknown ignores new fields
+	// for forward-compatible clients.
 	jsonrpcUnmarshaler = protojson.UnmarshalOptions{
-		// CRITICAL for forward-compatibility
 		DiscardUnknown: true,
 	}
 )
@@ -63,8 +65,11 @@ type jsonrpcHandler struct {
 // JSONRPCHandlerOption configures [NewJSONRPCHandler].
 type JSONRPCHandlerOption func(*jsonrpcHandler)
 
-// ServeHTTP handles a single JSON-RPC 2.0 call: POST only, decodes body, validates version and id,
-// dispatches to GetThread / ListThreads / ListThreadEvents, and writes JSON result or error.
+// ServeHTTP implements JSON-RPC 2.0 over HTTP: optional CORS (including OPTIONS preflight),
+// POST-only RPC, decodes the body, validates jsonrpc version and non-empty id, dispatches to
+// GetThread / ListThreads / ListThreadEvents, and writes a JSON result (protobuf-as-JSON in result)
+// or a JSON-RPC error. Non-POST requests (other than OPTIONS when CORS is enabled) receive
+// an invalid-request error.
 func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 
@@ -110,7 +115,9 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	h.handleRequest(ctx, rw, &payload)
 }
 
-// handleRequest runs after top-level validation and encodes success or delegates to [jsonrpcHandler.writeJSONRPCError].
+// handleRequest unmarshals params with [jsonrpcUnmarshaler], calls [service.Service], then either
+// marshals the protobuf result with [jsonrpcMarshaler] into the JSON-RPC result field or writes
+// an error via [jsonrpcHandler.writeJSONRPCError].
 func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWriter, req *jsonrpcRequest) {
 	var result proto.Message
 	var err error
@@ -175,10 +182,10 @@ func (h *jsonrpcHandler) writeJSONRPCError(ctx context.Context, rw http.Response
 	}
 
 	var jsonrpcError JSONRPCError
-	if !errors.As(err, &jsonrpcError) {
-		jsonrpcError = ErrInternalError{err: err}
-	} else if st, ok := status.FromError(err); ok {
+	if st, ok := status.FromError(err); ok {
 		jsonrpcError = h.grpcToJSONRPCError(st)
+	} else if errors.As(err, &jsonrpcError) {
+		// As walks the chain and fills jsonrpcError
 	} else {
 		jsonrpcError = ErrInternalError{err: err}
 	}
@@ -189,7 +196,9 @@ func (h *jsonrpcHandler) writeJSONRPCError(ctx context.Context, rw http.Response
 	}
 }
 
-// grpcToJSONRPCError maps standard gRPC status codes to JSON-RPC 2.0 error codes
+// grpcToJSONRPCError maps google.golang.org/grpc/status codes from the history [service.Service]
+// (for example NotFound, InvalidArgument) to [JSONRPCError] values, using -326xx standard codes
+// where they apply and -320xx implementation-defined codes for auth, permission, and not-found.
 func (h *jsonrpcHandler) grpcToJSONRPCError(st *status.Status) JSONRPCError {
 	switch st.Code() {
 	case codes.InvalidArgument:
@@ -209,7 +218,10 @@ func (h *jsonrpcHandler) grpcToJSONRPCError(st *status.Status) JSONRPCError {
 
 // NewJSONRPCHandler returns an [http.Handler] that implements JSON-RPC 2.0 for the history API
 // (ListThreads, GetThread, ListThreadEvents). The service must implement [service.Service].
-// Pass [WithCORS] (and [CORSAllowOrigin] / [CORSAllowHeaders] / [CORSAllowMethods]) for browser clients.
+// Request params and response results are protobuf JSON (protojson): camelCase keys, unknown fields
+// ignored on input, unpopulated fields included on output. gRPC status errors from the service are
+// mapped to JSON-RPC errors. Pass [WithCORS] (and [CORSAllowOrigin] / [CORSAllowHeaders] / [CORSAllowMethods])
+// for browser clients.
 func NewJSONRPCHandler(service service.Service, opts ...JSONRPCHandlerOption) http.Handler {
 	h := &jsonrpcHandler{service: service}
 	for _, o := range opts {

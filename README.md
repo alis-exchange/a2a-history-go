@@ -43,7 +43,7 @@ flowchart LR
 ```
 
 1. **Interceptor path:** On each RPC, `Before` activates the history extension when the client requested it, converts `SendMessage` payloads to `ThreadEvent`s, and either appends immediately or defers until `After` has a `ContextID` from the response. `After` appends response-shaped events (task, message, status, artifact updates) and may append twice when a deferred user message is flushed first.
-2. **JSON-RPC path:** Browsers or tools call `GetThread`, `ListThreads`, `ListThreadEvents` over JSON-RPC 2.0 POST; the same `Service` backs reads. For cross-origin browsers, register the handler with `srv.WithCORS()` (or tailored `CORSAllow*` options).
+2. **JSON-RPC path:** Browsers or tools call `GetThread`, `ListThreads`, `ListThreadEvents` over JSON-RPC 2.0 POST; the same `Service` backs reads. Params and `result` use **protojson** (camelCase JSON; unknown fields are ignored on decode). Errors returned by the service as **gRPC statuses** are mapped to JSON-RPC error codes (for example `InvalidArgument` → invalid params, `NotFound` → not found). For cross-origin browsers, register the handler with `srv.WithCORS()` (or tailored `CORSAllow*` options).
 
 ## Installation
 
@@ -204,7 +204,7 @@ requestHandler := a2asrv.NewHandler(
 
 ### JSON-RPC handler (optional)
 
-Expose history reads over HTTP with [`srv.NewJSONRPCHandler`](srv/jsonrpc.go). The handler accepts optional functional options (`...srv.JSONRPCHandlerOption`). Mount it at [`srv.HistoryExtensionPath`](srv/jsonrpc.go) or any path your gateway uses.
+Expose history reads over HTTP with [`srv.NewJSONRPCHandler`](srv/jsonrpc.go). The handler accepts optional functional options (`...srv.JSONRPCHandlerOption`). Mount it at [`srv.HistoryExtensionPath`](srv/jsonrpc.go) or any path your gateway uses. Wire format: JSON-RPC 2.0 with protobuf messages in `params` / `result` via **protojson**; service errors that are gRPC statuses are translated to JSON-RPC errors (see [`srv/errors.go`](srv/errors.go) for codes such as [`ErrNotFound`](srv/errors.go), [`ErrInvalidParams`](srv/errors.go)).
 
 Same-origin or non-browser clients (no CORS):
 
