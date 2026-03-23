@@ -1,0 +1,6 @@
+# Directories named `.debug` anywhere (hidden debug trees)
+**/.debug/
+
+# Names containing "debug" (files or directories; root and nested)
+*debug*
+**/*debug*

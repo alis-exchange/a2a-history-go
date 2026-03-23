@@ -9,6 +9,11 @@ import (
 
 	v1 "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
 	"go.alis.build/a2a/extension/history/service"
+	"go.alis.build/alog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 // JSON-RPC 2.0 protocol constants
@@ -24,12 +29,14 @@ const (
 
 var (
 	// JSONRPC Errors
-	errInvalidRequest = ErrInvalidRequest{err: errors.New("invalid request")}
-	errInvalidParams  = ErrInvalidParams{err: errors.New("invalid parameters")}
-	errMethodNotFound = ErrMethodNotFound{err: errors.New("method not found")}
-	errInternalError  = ErrInternalError{err: errors.New("internal error")}
-	errParseError     = ErrParseError{err: errors.New("parse error")}
-	errServerError    = ErrServerError{err: errors.New("server error")}
+	jsonrpcMarshaler = protojson.MarshalOptions{
+		UseProtoNames:   false,
+		EmitUnpopulated: true,
+	}
+	jsonrpcUnmarshaler = protojson.UnmarshalOptions{
+		// CRITICAL for forward-compatibility
+		DiscardUnknown: true,
+	}
 )
 
 // jsonrpcRequest represents a JSON-RPC 2.0 request.
@@ -71,7 +78,7 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	// Validate that is "POST" request
 	if req.Method != http.MethodPost {
-		h.writeJSONRPCError(ctx, rw, errInvalidRequest, nil)
+		h.writeJSONRPCError(ctx, rw, ErrInvalidRequest{err: errors.New("method not allowed")}, nil)
 		return
 	}
 
@@ -83,19 +90,19 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	var payload jsonrpcRequest
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-		h.writeJSONRPCError(ctx, rw, errInvalidRequest, payload.ID)
+		h.writeJSONRPCError(ctx, rw, ErrInvalidRequest{err: err}, payload.ID)
 		return
 	}
 
 	// Validate payload ID
 	if payload.ID == "" {
-		h.writeJSONRPCError(ctx, rw, errInvalidRequest, nil)
+		h.writeJSONRPCError(ctx, rw, ErrInvalidRequest{err: errors.New("missing request id")}, nil)
 		return
 	}
 
 	// Validate JSONRPC Version
 	if payload.JSONRPC != version {
-		h.writeJSONRPCError(ctx, rw, errInvalidRequest, payload.ID)
+		h.writeJSONRPCError(ctx, rw, ErrInvalidRequest{err: errors.New("invalid JSON-RPC version")}, payload.ID)
 		return
 	}
 
@@ -105,8 +112,9 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 // handleRequest runs after top-level validation and encodes success or delegates to [jsonrpcHandler.writeJSONRPCError].
 func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWriter, req *jsonrpcRequest) {
-	var result any
+	var result proto.Message
 	var err error
+
 	switch req.Method {
 	case methodListThreads:
 		result, err = h.onHandleThreadsList(ctx, req.Params)
@@ -115,9 +123,9 @@ func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWrit
 	case methodListThreadEvents:
 		result, err = h.onHandleEventsList(ctx, req.Params)
 	case "":
-		err = errInvalidRequest
+		err = ErrInvalidRequest{err: errors.New("method not found")}
 	default:
-		err = errMethodNotFound
+		err = ErrMethodNotFound{err: errors.New("method not found")}
 	}
 	if err != nil {
 		h.writeJSONRPCError(ctx, rw, err, req.ID)
@@ -125,33 +133,38 @@ func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWrit
 	}
 
 	if result != nil {
-		resp := jsonrpcResponse{JSONRPC: version, ID: req.ID, Result: result}
+		resultJSON, err := jsonrpcMarshaler.Marshal(result)
+		if err != nil {
+			h.writeJSONRPCError(ctx, rw, ErrInternalError{err: err}, req.ID)
+			return
+		}
+		resp := jsonrpcResponse{JSONRPC: version, ID: req.ID, Result: resultJSON}
 		if err := json.NewEncoder(rw).Encode(resp); err != nil {
-			log.Fatal(ctx, "failed to encode response", err)
+			alog.Alertf(ctx, "failed to encode response: %v", err)
 		}
 	}
 }
 
 func (h *jsonrpcHandler) onHandleThreadsList(ctx context.Context, raw json.RawMessage) (*v1.ListThreadsResponse, error) {
-	var query *v1.ListThreadsRequest
-	if err := json.Unmarshal(raw, &query); err != nil {
-		return nil, errInvalidParams
+	query := &v1.ListThreadsRequest{}
+	if err := jsonrpcUnmarshaler.Unmarshal(raw, query); err != nil {
+		return nil, ErrInvalidParams{err: err}
 	}
 	return h.service.ListThreads(ctx, query)
 }
 
 func (h *jsonrpcHandler) onHandleThreadGet(ctx context.Context, raw json.RawMessage) (*v1.Thread, error) {
-	var query *v1.GetThreadRequest
-	if err := json.Unmarshal(raw, &query); err != nil {
-		return nil, errInvalidParams
+	query := &v1.GetThreadRequest{}
+	if err := jsonrpcUnmarshaler.Unmarshal(raw, query); err != nil {
+		return nil, ErrInvalidParams{err: err}
 	}
 	return h.service.GetThread(ctx, query)
 }
 
 func (h *jsonrpcHandler) onHandleEventsList(ctx context.Context, raw json.RawMessage) (*v1.ListThreadEventsResponse, error) {
-	var query *v1.ListThreadEventsRequest
-	if err := json.Unmarshal(raw, &query); err != nil {
-		return nil, errInvalidParams
+	query := &v1.ListThreadEventsRequest{}
+	if err := jsonrpcUnmarshaler.Unmarshal(raw, query); err != nil {
+		return nil, ErrInvalidParams{err: err}
 	}
 	return h.service.ListThreadEvents(ctx, query)
 }
@@ -163,11 +176,34 @@ func (h *jsonrpcHandler) writeJSONRPCError(ctx context.Context, rw http.Response
 
 	var jsonrpcError JSONRPCError
 	if !errors.As(err, &jsonrpcError) {
-		jsonrpcError = errInternalError
+		jsonrpcError = ErrInternalError{err: err}
+	} else if st, ok := status.FromError(err); ok {
+		jsonrpcError = h.grpcToJSONRPCError(st)
+	} else {
+		jsonrpcError = ErrInternalError{err: err}
 	}
+
 	resp := jsonrpcResponse{JSONRPC: version, Error: jsonrpcError.JSONRPCErrorObject(), ID: reqID}
 	if err := json.NewEncoder(rw).Encode(resp); err != nil {
-		log.Fatal(ctx, "failed to send error response", err)
+		alog.Alertf(ctx, "failed to send error response: %v", err)
+	}
+}
+
+// grpcToJSONRPCError maps standard gRPC status codes to JSON-RPC 2.0 error codes
+func (h *jsonrpcHandler) grpcToJSONRPCError(st *status.Status) JSONRPCError {
+	switch st.Code() {
+	case codes.InvalidArgument:
+		return ErrInvalidParams{err: st.Err()}
+	case codes.NotFound:
+		return ErrNotFound{err: st.Err()}
+	case codes.Unauthenticated:
+		return ErrUnauthenticated{err: st.Err()}
+	case codes.PermissionDenied:
+		return ErrPermissionDenied{err: st.Err()}
+	case codes.Unimplemented:
+		return ErrUnimplemented{err: st.Err()}
+	default:
+		return ErrInternalError{err: st.Err()}
 	}
 }
 

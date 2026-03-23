@@ -163,3 +163,87 @@ func (e ErrServerError) JSONRPCErrorObject() *jsonrpcErrorObject {
 		Data:    e.err,
 	}
 }
+
+// ErrUnauthenticated represents an unauthenticated error.
+type ErrUnauthenticated struct {
+	err error
+}
+
+func (e ErrUnauthenticated) Error() string {
+	return fmt.Sprintf("unauthenticated: %v", e.err)
+}
+
+func (e ErrUnauthenticated) Is(target error) bool {
+	return errors.Is(e.err, target)
+}
+
+func (e ErrUnauthenticated) JSONRPCErrorObject() *jsonrpcErrorObject {
+	return &jsonrpcErrorObject{
+		Code:    -32001,
+		Message: e.Error(),
+		Data:    e.err,
+	}
+}
+
+// ErrPermissionDenied represents a permission denied error.
+type ErrPermissionDenied struct {
+	err error
+}
+
+func (e ErrPermissionDenied) Error() string {
+	return fmt.Sprintf("permission denied: %v", e.err)
+}
+
+func (e ErrPermissionDenied) Is(target error) bool {
+	return errors.Is(e.err, target)
+}
+
+func (e ErrPermissionDenied) JSONRPCErrorObject() *jsonrpcErrorObject {
+	return &jsonrpcErrorObject{
+		Code:    -32003,
+		Message: e.Error(),
+		Data:    e.err,
+	}
+}
+
+// ErrUnimplemented represents an unimplemented error.
+type ErrUnimplemented struct {
+	err error
+}
+
+func (e ErrUnimplemented) Error() string {
+	return fmt.Sprintf("unimplemented: %v", e.err)
+}
+
+func (e ErrUnimplemented) Is(target error) bool {
+	return errors.Is(e.err, target)
+}
+
+func (e ErrUnimplemented) JSONRPCErrorObject() *jsonrpcErrorObject {
+	return &jsonrpcErrorObject{
+		Code:    -32601,
+		Message: e.Error(),
+		Data:    e.err,
+	}
+}
+
+// ErrNotFound represents a not found error.
+type ErrNotFound struct {
+	err error
+}
+
+func (e ErrNotFound) Error() string {
+	return fmt.Sprintf("not found: %v", e.err)
+}
+
+func (e ErrNotFound) Is(target error) bool {
+	return errors.Is(e.err, target)
+}
+
+func (e ErrNotFound) JSONRPCErrorObject() *jsonrpcErrorObject {
+	return &jsonrpcErrorObject{
+		Code:    -32004,
+		Message: e.Error(),
+		Data:    e.err,
+	}
+}
