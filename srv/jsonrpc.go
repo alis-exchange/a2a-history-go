@@ -50,15 +50,27 @@ type jsonrpcResponse struct {
 
 type jsonrpcHandler struct {
 	service service.Service
+	cors    *corsConfig
 }
+
+// JSONRPCHandlerOption configures [NewJSONRPCHandler].
+type JSONRPCHandlerOption func(*jsonrpcHandler)
 
 // ServeHTTP handles a single JSON-RPC 2.0 call: POST only, decodes body, validates version and id,
 // dispatches to GetThread / ListThreads / ListThreadEvents, and writes JSON result or error.
 func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 
+	if h.cors != nil {
+		h.cors.writeHeaders(rw)
+		if req.Method == http.MethodOptions {
+			rw.WriteHeader(http.StatusOK)
+			return
+		}
+	}
+
 	// Validate that is "POST" request
-	if req.Method != "POST" {
+	if req.Method != http.MethodPost {
 		h.writeJSONRPCError(ctx, rw, errInvalidRequest, nil)
 		return
 	}
@@ -161,8 +173,11 @@ func (h *jsonrpcHandler) writeJSONRPCError(ctx context.Context, rw http.Response
 
 // NewJSONRPCHandler returns an [http.Handler] that implements JSON-RPC 2.0 for the history API
 // (ListThreads, GetThread, ListThreadEvents). The service must implement [service.Service].
-func NewJSONRPCHandler(service service.Service) http.Handler {
-	return &jsonrpcHandler{
-		service: service,
+// Pass [WithCORS] (and [CORSAllowOrigin] / [CORSAllowHeaders] / [CORSAllowMethods]) for browser clients.
+func NewJSONRPCHandler(service service.Service, opts ...JSONRPCHandlerOption) http.Handler {
+	h := &jsonrpcHandler{service: service}
+	for _, o := range opts {
+		o(h)
 	}
+	return h
 }

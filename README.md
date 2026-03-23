@@ -15,7 +15,7 @@ This project contains a lightweight Go library for developers supporting the [a2
 | Package                                                   | Role                                                                                                                                                                                                                                                                                         |
 | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`go.alis.build/a2a/extension/history/service`](service/) | [`Service`](service/service.go) interface and [`SpannerService`](service/spanner.go) (Google Cloud Spanner + IAM).                                                                                                                                                                           |
-| [`go.alis.build/a2a/extension/history/srv`](srv/)         | [`NewInterceptor`](srv/interceptor.go) ([`a2asrv.CallInterceptor`](https://pkg.go.dev/github.com/a2aproject/a2a-go/v2/a2asrv#CallInterceptor)), [`NewJSONRPCHandler`](srv/jsonrpc.go), A2A→proto conversions ([`pbconv.go`](srv/pbconv.go)), JSON-RPC errors ([`errors.go`](srv/errors.go)). |
+| [`go.alis.build/a2a/extension/history/srv`](srv/)         | [`NewInterceptor`](srv/interceptor.go) ([`a2asrv.CallInterceptor`](https://pkg.go.dev/github.com/a2aproject/a2a-go/v2/a2asrv#CallInterceptor)), [`NewJSONRPCHandler`](srv/jsonrpc.go) with options such as [`WithCORS`](srv/cors.go), A2A→proto conversions ([`pbconv.go`](srv/pbconv.go)), JSON-RPC errors ([`errors.go`](srv/errors.go)). |
 
 Package-level documentation (design, IAM roles, interceptor flow) lives in [`service/docs.go`](service/docs.go) and [`srv/docs.go`](srv/docs.go). Run `go doc -all ./...` locally for the full commentary.
 
@@ -43,7 +43,7 @@ flowchart LR
 ```
 
 1. **Interceptor path:** On each RPC, `Before` activates the history extension when the client requested it, converts `SendMessage` payloads to `ThreadEvent`s, and either appends immediately or defers until `After` has a `ContextID` from the response. `After` appends response-shaped events (task, message, status, artifact updates) and may append twice when a deferred user message is flushed first.
-2. **JSON-RPC path:** Browsers or tools call `GetThread`, `ListThreads`, `ListThreadEvents` over JSON-RPC 2.0 POST; the same `Service` backs reads.
+2. **JSON-RPC path:** Browsers or tools call `GetThread`, `ListThreads`, `ListThreadEvents` over JSON-RPC 2.0 POST; the same `Service` backs reads. For cross-origin browsers, register the handler with `srv.WithCORS()` (or tailored `CORSAllow*` options).
 
 ## Installation
 
@@ -204,7 +204,33 @@ requestHandler := a2asrv.NewHandler(
 
 ### JSON-RPC handler (optional)
 
-Expose history reads over HTTP using [`srv.NewJSONRPCHandler`](srv/jsonrpc.go); mount at [`srv.HistoryExtensionPath`](srv/jsonrpc.go) or your chosen route.
+Expose history reads over HTTP with [`srv.NewJSONRPCHandler`](srv/jsonrpc.go). The handler accepts optional functional options (`...srv.JSONRPCHandlerOption`). Mount it at [`srv.HistoryExtensionPath`](srv/jsonrpc.go) or any path your gateway uses.
+
+Same-origin or non-browser clients (no CORS):
+
+```go
+import "go.alis.build/a2a/extension/history/srv"
+
+mux.Handle(srv.HistoryExtensionPath, srv.NewJSONRPCHandler(historyService))
+```
+
+Browser clients crossing origins need CORS on the JSON-RPC responses and an OPTIONS preflight. Pass [`srv.WithCORS`](srv/cors.go) (defaults: `Access-Control-Allow-Origin: *`, `POST` and `OPTIONS`, and common `Content-Type` / `Authorization` / Alis `X-Alis-*` headers):
+
+```go
+mux.Handle(srv.HistoryExtensionPath, srv.NewJSONRPCHandler(historyService, srv.WithCORS()))
+```
+
+Override origin or allowed headers/methods with [`srv.CORSAllowOrigin`](srv/cors.go), [`srv.CORSAllowHeaders`](srv/cors.go), and [`srv.CORSAllowMethods`](srv/cors.go):
+
+```go
+mux.Handle(srv.HistoryExtensionPath, srv.NewJSONRPCHandler(historyService,
+	srv.WithCORS(
+		srv.CORSAllowOrigin("https://app.example.com"),
+		srv.CORSAllowHeaders("Content-Type", "Authorization"),
+		srv.CORSAllowMethods("POST", "OPTIONS"),
+	),
+))
+```
 
 ## Documentation
 
