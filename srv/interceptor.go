@@ -216,6 +216,12 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 
 	// If no event was captured, return nil
 	if event == nil {
+		// If there is an error, return it
+		if resp.Err != nil {
+			return resp.Err
+		}
+
+		// Otherwise, return nil
 		return nil
 	}
 
