@@ -145,7 +145,7 @@ func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWrit
 			h.writeJSONRPCError(ctx, rw, ErrInternalError{err: err}, req.ID)
 			return
 		}
-		resp := jsonrpcResponse{JSONRPC: version, ID: req.ID, Result: resultJSON}
+		resp := jsonrpcResponse{JSONRPC: version, ID: req.ID, Result: json.RawMessage(resultJSON)}
 		if err := json.NewEncoder(rw).Encode(resp); err != nil {
 			alog.Alertf(ctx, "failed to encode response: %v", err)
 		}
