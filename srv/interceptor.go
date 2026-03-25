@@ -8,9 +8,9 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/google/uuid"
-	v1 "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
 	"go.alis.build/a2a/extension/history/service"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"go.alis.build/common/alis/a2a/extension/history/v1"
+	"go.alis.build/common/google/protobuf"
 )
 
 type invocationKeyType struct{}
@@ -103,7 +103,7 @@ func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, r
 			// Initialize event
 			event := &v1.ThreadEvent{
 				Payload:    &v1.ThreadEvent_Message{Message: message},
-				CreateTime: timestamppb.Now(),
+				CreateTime: protobuf.Now(),
 			}
 
 			// Defer event creation to "After" if contextID not currently known.
@@ -153,7 +153,7 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			}
 			event = &v1.ThreadEvent{
 				Payload:    &v1.ThreadEvent_Task{Task: task},
-				CreateTime: timestamppb.Now(),
+				CreateTime: protobuf.Now(),
 			}
 		}
 	case *a2a.Message:
@@ -165,7 +165,7 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			}
 			event = &v1.ThreadEvent{
 				Payload:    &v1.ThreadEvent_Message{Message: message},
-				CreateTime: timestamppb.Now(),
+				CreateTime: protobuf.Now(),
 			}
 		}
 	case *a2a.TaskStatusUpdateEvent:
@@ -177,7 +177,7 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			}
 			event = &v1.ThreadEvent{
 				Payload:    &v1.ThreadEvent_StatusUpdate{StatusUpdate: statusUpdate},
-				CreateTime: timestamppb.Now(),
+				CreateTime: protobuf.Now(),
 			}
 		}
 	case *a2a.TaskArtifactUpdateEvent:
@@ -189,7 +189,7 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			}
 			event = &v1.ThreadEvent{
 				Payload:    &v1.ThreadEvent_ArtifactUpdate{ArtifactUpdate: artifactUpdate},
-				CreateTime: timestamppb.Now(),
+				CreateTime: protobuf.Now(),
 			}
 		}
 	}

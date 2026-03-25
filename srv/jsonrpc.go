@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	v1 "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
+	v1 "go.alis.build/common/alis/a2a/extension/history/v1"
 	"go.alis.build/a2a/extension/history/service"
 	"go.alis.build/alog"
 	"google.golang.org/grpc"

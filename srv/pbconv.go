@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
-	a2apb "go.alis.build/a2a/lf/a2a/v1"
-	"google.golang.org/protobuf/types/known/structpb"
+	"go.alis.build/common/google/protobuf"
+	a2apb "go.alis.build/common/lf/a2a/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -281,25 +281,28 @@ func toProtoTaskStatus(status a2a.TaskStatus) (*a2apb.TaskStatus, error) {
 		Message: message,
 	}
 	if status.Timestamp != nil {
-		pStatus.Timestamp = timestamppb.New(*status.Timestamp)
+		pStatus.Timestamp = &protobuf.Timestamp{
+			Seconds: timestamppb.New(*status.Timestamp).GetSeconds(),
+			Nanos:   timestamppb.New(*status.Timestamp).GetNanos(),
+		}
 	}
 
 	return pStatus, nil
 }
 
-func toProtoStruct(data map[string]any) (*structpb.Struct, error) {
+func toProtoStruct(data map[string]any) (*protobuf.Struct, error) {
 	if data == nil {
 		return nil, nil
 	}
-	s, err := structpb.NewStruct(data)
+	s, err := protobuf.NewStruct(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert metadata to proto struct: %w", err)
 	}
 	return s, nil
 }
 
-func toProtoValue(data any) (*structpb.Value, error) {
-	s, err := structpb.NewValue(data)
+func toProtoValue(data any) (*protobuf.Value, error) {
+	s, err := protobuf.NewValue(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert metadata to proto value: %w", err)
 	}

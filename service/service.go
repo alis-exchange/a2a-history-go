@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
+	v1 "go.alis.build/common/alis/a2a/extension/history/v1"
 )
 
 // Service is the persistence contract for A2A thread history: one [v1.Thread] per conversation

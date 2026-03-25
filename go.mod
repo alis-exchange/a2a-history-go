@@ -8,13 +8,11 @@ require (
 	github.com/a2aproject/a2a-go/v2 v2.0.0
 	github.com/alis-exchange/go-alis-build/iam/v2 v2.2.1
 	github.com/google/uuid v1.6.0
-	go.alis.build/a2a v1.0.492
 	go.alis.build/alog v0.0.19
+	go.alis.build/common v1.0.5
 	go.alis.build/validation v1.0.7
-	google.golang.org/genproto v0.0.0-20260223185530-2f722ef697dc
 	google.golang.org/grpc v1.79.1
 	google.golang.org/protobuf v1.36.11
-	open.alis.services/protobuf v1.200.13
 )
 
 require (
@@ -58,6 +56,7 @@ require (
 	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/api v0.265.0 // indirect
+	google.golang.org/genproto v0.0.0-20260223185530-2f722ef697dc // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260223185530-2f722ef697dc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260217215200-42d3e9bedb6d // indirect
 )

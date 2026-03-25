@@ -10,11 +10,11 @@ import (
 	"cloud.google.com/go/spanner"
 	"github.com/alis-exchange/go-alis-build/iam/v2"
 	"github.com/google/uuid"
-	v1 "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
+	v1 "go.alis.build/common/alis/a2a/extension/history/v1"
+	"go.alis.build/common/google/protobuf"
 	"go.alis.build/validation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -295,7 +295,7 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 	req.GetEvent().Name = fmt.Sprintf("%s/events/%s", historyName, uuid.NewString())
 
 	if req.GetEvent().GetCreateTime() == nil {
-		req.GetEvent().CreateTime = timestamppb.Now()
+		req.GetEvent().CreateTime = protobuf.Now()
 	}
 
 	// insert Thread resource if missing
@@ -309,7 +309,7 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 			Name:        historyName,
 			DisplayName: now.Format(time.RFC3339),
 			AgentId:     req.GetAgentId(),
-			CreateTime:  timestamppb.New(now),
+			CreateTime:  protobuf.Now(),
 		}
 		policy := &iampb.Policy{
 			Bindings: []*iampb.Binding{
