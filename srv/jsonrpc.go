@@ -6,11 +6,14 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 
 	v1 "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
 	"go.alis.build/a2a/extension/history/service"
 	"go.alis.build/alog"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -62,6 +65,17 @@ type jsonrpcHandler struct {
 	cors    *corsConfig
 }
 
+// jsonrpcStream implements grpc.ServerTransportStream to provide the gRPC method name
+// to downstream authorizers that rely on it.
+type jsonrpcStream struct {
+	method string
+}
+
+func (s *jsonrpcStream) Method() string { return s.method }
+func (s *jsonrpcStream) SetHeader(md metadata.MD) error  { return nil }
+func (s *jsonrpcStream) SendHeader(md metadata.MD) error { return nil }
+func (s *jsonrpcStream) SetTrailer(md metadata.MD) error { return nil }
+
 // JSONRPCHandlerOption configures [NewJSONRPCHandler].
 type JSONRPCHandlerOption func(*jsonrpcHandler)
 
@@ -72,6 +86,14 @@ type JSONRPCHandlerOption func(*jsonrpcHandler)
 // an invalid-request error.
 func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
+
+	// Extract all incoming headers and set them in gRPC metadata so that
+	// downstream service calls can use them.
+	md := metadata.MD{}
+	for k, vs := range req.Header {
+		md[strings.ToLower(k)] = vs
+	}
+	ctx = metadata.NewIncomingContext(ctx, md)
 
 	if h.cors != nil {
 		h.cors.writeHeaders(rw)
@@ -157,6 +179,7 @@ func (h *jsonrpcHandler) onHandleThreadsList(ctx context.Context, raw json.RawMe
 	if err := jsonrpcUnmarshaler.Unmarshal(raw, query); err != nil {
 		return nil, ErrInvalidParams{err: err}
 	}
+	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: v1.ThreadService_ListThreads_FullMethodName})
 	return h.service.ListThreads(ctx, query)
 }
 
@@ -165,6 +188,7 @@ func (h *jsonrpcHandler) onHandleThreadGet(ctx context.Context, raw json.RawMess
 	if err := jsonrpcUnmarshaler.Unmarshal(raw, query); err != nil {
 		return nil, ErrInvalidParams{err: err}
 	}
+	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: v1.ThreadService_GetThread_FullMethodName})
 	return h.service.GetThread(ctx, query)
 }
 
@@ -173,6 +197,7 @@ func (h *jsonrpcHandler) onHandleEventsList(ctx context.Context, raw json.RawMes
 	if err := jsonrpcUnmarshaler.Unmarshal(raw, query); err != nil {
 		return nil, ErrInvalidParams{err: err}
 	}
+	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: v1.ThreadService_ListThreadEvents_FullMethodName})
 	return h.service.ListThreadEvents(ctx, query)
 }
 
