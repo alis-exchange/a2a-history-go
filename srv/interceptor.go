@@ -9,7 +9,9 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/google/uuid"
 	"go.alis.build/a2a/extension/history/service"
-	"go.alis.build/common/alis/a2a/extension/history/v1"
+	v1 "go.alis.build/common/alis/a2a/extension/history/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -116,6 +118,7 @@ func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, r
 			}
 
 			// Capture Event
+			ctx = i.injectGrpcMetadata(ctx, callCtx)
 			_, err = i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
 				Event:   event,
 				AgentId: i.agentID,
@@ -257,4 +260,16 @@ func (i *interceptor) popCached(invocationID string) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	delete(i.store, invocationID)
+}
+
+// injectGrpcMetadata injects all incoming headers and set them in gRPC metadata so that
+// downstream service calls can use them.
+func (i *interceptor) injectGrpcMetadata(ctx context.Context, callCtx *a2asrv.CallContext) context.Context {
+	md := metadata.MD{}
+	for k, v := range callCtx.ServiceParams().List() {
+		md[k] = v
+	}
+
+	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: v1.ThreadService_AppendThreadEvent_FullMethodName})
+	return metadata.NewIncomingContext(ctx, md)
 }
