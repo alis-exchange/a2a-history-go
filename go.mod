@@ -9,7 +9,7 @@ require (
 	github.com/alis-exchange/go-alis-build/iam/v2 v2.2.1
 	github.com/google/uuid v1.6.0
 	go.alis.build/alog v0.0.19
-	go.alis.build/common v1.0.5
+	go.alis.build/common v1.0.6
 	go.alis.build/validation v1.0.7
 	google.golang.org/grpc v1.79.1
 	google.golang.org/protobuf v1.36.11
