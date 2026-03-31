@@ -299,7 +299,7 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 	// insert Thread resource if missing
 	var mutations []*spanner.Mutation
 	if _, _, err := s.readThread(ctx, historyName); err != nil {
-		if spanner.ErrCode(err) != codes.NotFound {
+		if status.Code(err) != codes.NotFound {
 			return nil, err
 		}
 		now := time.Now().UTC()
@@ -338,18 +338,20 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 	return &pb.AppendThreadEventResponse{}, nil
 }
 
-// readThread loads the Thread and Policy columns for a thread primary key, or returns the Spanner error
-// (typically NotFound if the row does not exist).
+// readThread loads the Thread and Policy columns for a thread primary key.
 func (s *ThreadService) readThread(ctx context.Context, name string) (*pb.Thread, *iampb.Policy, error) {
 	row, err := s.db.Single().ReadRow(ctx, s.historyTbl, spanner.Key{name}, []string{"Thread", "Policy"})
 	if err != nil {
-		return nil, nil, err
+		if spanner.ErrCode(err) == codes.NotFound {
+			return nil, nil, status.Errorf(codes.NotFound, "thread %q not found", name)
+		}
+		return nil, nil, status.Errorf(codes.Internal, "reading thread %q: %v", name, err)
 	}
 	history := &pb.Thread{}
 	policy := &iampb.Policy{}
 
 	if err := row.Columns(history, policy); err != nil {
-		return nil, nil, err
+		return nil, nil, status.Errorf(codes.Internal, "decoding thread %q: %v", name, err)
 	}
 	return history, policy, nil
 }
