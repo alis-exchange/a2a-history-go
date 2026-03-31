@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	v1 "go.alis.build/common/alis/a2a/extension/history/v1"
 	"go.alis.build/a2a/extension/history/service"
 	"go.alis.build/alog"
+	pb "go.alis.build/common/alis/a2a/extension/history/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -27,7 +27,7 @@ const (
 	methodListThreads      = "ListThreads"
 	methodListThreadEvents = "ListThreadEvents"
 	// HistoryExtensionPath is the default HTTP path segment for mounting [NewJSONRPCHandler].
-	HistoryExtensionPath = "/extensions/a2ahistory"
+	HistoryExtensionPath = "/alis.a2a.extension.history.v1.ThreadService"
 )
 
 var (
@@ -61,7 +61,7 @@ type jsonrpcResponse struct {
 }
 
 type jsonrpcHandler struct {
-	service service.Service
+	service service.ThreadService
 	cors    *corsConfig
 }
 
@@ -71,7 +71,7 @@ type jsonrpcStream struct {
 	method string
 }
 
-func (s *jsonrpcStream) Method() string { return s.method }
+func (s *jsonrpcStream) Method() string                  { return s.method }
 func (s *jsonrpcStream) SetHeader(md metadata.MD) error  { return nil }
 func (s *jsonrpcStream) SendHeader(md metadata.MD) error { return nil }
 func (s *jsonrpcStream) SetTrailer(md metadata.MD) error { return nil }
@@ -174,30 +174,30 @@ func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWrit
 	}
 }
 
-func (h *jsonrpcHandler) onHandleThreadsList(ctx context.Context, raw json.RawMessage) (*v1.ListThreadsResponse, error) {
-	query := &v1.ListThreadsRequest{}
+func (h *jsonrpcHandler) onHandleThreadsList(ctx context.Context, raw json.RawMessage) (*pb.ListThreadsResponse, error) {
+	query := &pb.ListThreadsRequest{}
 	if err := jsonrpcUnmarshaler.Unmarshal(raw, query); err != nil {
 		return nil, ErrInvalidParams{err: err}
 	}
-	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: v1.ThreadService_ListThreads_FullMethodName})
+	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: pb.ThreadService_ListThreads_FullMethodName})
 	return h.service.ListThreads(ctx, query)
 }
 
-func (h *jsonrpcHandler) onHandleThreadGet(ctx context.Context, raw json.RawMessage) (*v1.Thread, error) {
-	query := &v1.GetThreadRequest{}
+func (h *jsonrpcHandler) onHandleThreadGet(ctx context.Context, raw json.RawMessage) (*pb.Thread, error) {
+	query := &pb.GetThreadRequest{}
 	if err := jsonrpcUnmarshaler.Unmarshal(raw, query); err != nil {
 		return nil, ErrInvalidParams{err: err}
 	}
-	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: v1.ThreadService_GetThread_FullMethodName})
+	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: pb.ThreadService_GetThread_FullMethodName})
 	return h.service.GetThread(ctx, query)
 }
 
-func (h *jsonrpcHandler) onHandleEventsList(ctx context.Context, raw json.RawMessage) (*v1.ListThreadEventsResponse, error) {
-	query := &v1.ListThreadEventsRequest{}
+func (h *jsonrpcHandler) onHandleEventsList(ctx context.Context, raw json.RawMessage) (*pb.ListThreadEventsResponse, error) {
+	query := &pb.ListThreadEventsRequest{}
 	if err := jsonrpcUnmarshaler.Unmarshal(raw, query); err != nil {
 		return nil, ErrInvalidParams{err: err}
 	}
-	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: v1.ThreadService_ListThreadEvents_FullMethodName})
+	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: pb.ThreadService_ListThreadEvents_FullMethodName})
 	return h.service.ListThreadEvents(ctx, query)
 }
 
@@ -247,7 +247,7 @@ func (h *jsonrpcHandler) grpcToJSONRPCError(st *status.Status) JSONRPCError {
 // ignored on input, unpopulated fields included on output. gRPC status errors from the service are
 // mapped to JSON-RPC errors. Pass [WithCORS] (and [CORSAllowOrigin] / [CORSAllowHeaders] / [CORSAllowMethods])
 // for browser clients.
-func NewJSONRPCHandler(service service.Service, opts ...JSONRPCHandlerOption) http.Handler {
+func NewJSONRPCHandler(service service.ThreadService, opts ...JSONRPCHandlerOption) http.Handler {
 	h := &jsonrpcHandler{service: service}
 	for _, o := range opts {
 		o(h)

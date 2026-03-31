@@ -9,7 +9,7 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/google/uuid"
 	"go.alis.build/a2a/extension/history/service"
-	v1 "go.alis.build/common/alis/a2a/extension/history/v1"
+	pb "go.alis.build/common/alis/a2a/extension/history/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -30,10 +30,10 @@ const (
 var _ a2asrv.CallInterceptor = (*interceptor)(nil)
 
 type interceptor struct {
-	service service.Service
+	service service.ThreadService
 	agentID string
 	mu      sync.Mutex
-	store   map[string]*v1.ThreadEvent
+	store   map[string]*pb.ThreadEvent
 }
 
 // InterceptorOptions configures [NewInterceptor].
@@ -58,7 +58,7 @@ func WithAgentID(agentID string) InterceptorOption {
 // See package documentation for Before/After behavior and deferred SendMessage handling.
 //
 // A2A middleware: https://github.com/a2aproject/a2a-go/blob/main/a2asrv/middleware.go
-func NewInterceptor(service service.Service, opts ...InterceptorOption) *interceptor {
+func NewInterceptor(service service.ThreadService, opts ...InterceptorOption) *interceptor {
 	options := &InterceptorOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -66,7 +66,7 @@ func NewInterceptor(service service.Service, opts ...InterceptorOption) *interce
 	return &interceptor{
 		service: service,
 		agentID: options.AgentID,
-		store:   make(map[string]*v1.ThreadEvent),
+		store:   make(map[string]*pb.ThreadEvent),
 	}
 }
 
@@ -103,8 +103,8 @@ func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, r
 			}
 
 			// Initialize event
-			event := &v1.ThreadEvent{
-				Payload:    &v1.ThreadEvent_Message{Message: message},
+			event := &pb.ThreadEvent{
+				Payload:    &pb.ThreadEvent_Message{Message: message},
 				CreateTime: timestamppb.Now(),
 			}
 
@@ -119,7 +119,7 @@ func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, r
 
 			// Capture Event
 			ctx = i.injectGrpcMetadata(ctx, callCtx)
-			_, err = i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
+			_, err = i.service.AppendThreadEvent(ctx, &pb.AppendThreadEventRequest{
 				Event:   event,
 				AgentId: i.agentID,
 			})
@@ -145,7 +145,7 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 	var contextID string
 
 	// Handle incoming event payload type
-	var event *v1.ThreadEvent
+	var event *pb.ThreadEvent
 	switch p := resp.Payload.(type) {
 	case *a2a.Task:
 		if p != nil {
@@ -154,8 +154,8 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			if err != nil {
 				return err
 			}
-			event = &v1.ThreadEvent{
-				Payload:    &v1.ThreadEvent_Task{Task: task},
+			event = &pb.ThreadEvent{
+				Payload:    &pb.ThreadEvent_Task{Task: task},
 				CreateTime: timestamppb.Now(),
 			}
 		}
@@ -166,8 +166,8 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			if err != nil {
 				return err
 			}
-			event = &v1.ThreadEvent{
-				Payload:    &v1.ThreadEvent_Message{Message: message},
+			event = &pb.ThreadEvent{
+				Payload:    &pb.ThreadEvent_Message{Message: message},
 				CreateTime: timestamppb.Now(),
 			}
 		}
@@ -178,8 +178,8 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			if err != nil {
 				return err
 			}
-			event = &v1.ThreadEvent{
-				Payload:    &v1.ThreadEvent_StatusUpdate{StatusUpdate: statusUpdate},
+			event = &pb.ThreadEvent{
+				Payload:    &pb.ThreadEvent_StatusUpdate{StatusUpdate: statusUpdate},
 				CreateTime: timestamppb.Now(),
 			}
 		}
@@ -190,8 +190,8 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 			if err != nil {
 				return err
 			}
-			event = &v1.ThreadEvent{
-				Payload:    &v1.ThreadEvent_ArtifactUpdate{ArtifactUpdate: artifactUpdate},
+			event = &pb.ThreadEvent{
+				Payload:    &pb.ThreadEvent_ArtifactUpdate{ArtifactUpdate: artifactUpdate},
 				CreateTime: timestamppb.Now(),
 			}
 		}
@@ -201,11 +201,11 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 	invocationID, ok := ctx.Value(invocationKey).(string)
 	if ok {
 		if ev, found := i.peekCached(invocationID); found {
-			p, ok := ev.Payload.(*v1.ThreadEvent_Message)
+			p, ok := ev.Payload.(*pb.ThreadEvent_Message)
 			if ok && p != nil && p.Message != nil && contextID != "" {
 				// Update the contextID
 				p.Message.ContextId = contextID
-				_, err := i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
+				_, err := i.service.AppendThreadEvent(ctx, &pb.AppendThreadEventRequest{
 					Event:   ev,
 					AgentId: i.agentID,
 				})
@@ -229,7 +229,7 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 	}
 
 	// Capture the event
-	_, err := i.service.AppendThreadEvent(ctx, &v1.AppendThreadEventRequest{
+	_, err := i.service.AppendThreadEvent(ctx, &pb.AppendThreadEventRequest{
 		Event:   event,
 		AgentId: i.agentID,
 	})
@@ -241,14 +241,14 @@ func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, re
 }
 
 // cache stores a deferred ThreadEvent keyed by invocation id until After can fill context id.
-func (i *interceptor) cache(invocationID string, event *v1.ThreadEvent) {
+func (i *interceptor) cache(invocationID string, event *pb.ThreadEvent) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.store[invocationID] = event
 }
 
 // peekCached returns the cached event without removing it (used before append in After).
-func (i *interceptor) peekCached(invocationID string) (*v1.ThreadEvent, bool) {
+func (i *interceptor) peekCached(invocationID string) (*pb.ThreadEvent, bool) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	ev, ok := i.store[invocationID]
@@ -270,6 +270,6 @@ func (i *interceptor) injectGrpcMetadata(ctx context.Context, callCtx *a2asrv.Ca
 		md[k] = v
 	}
 
-	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: v1.ThreadService_AppendThreadEvent_FullMethodName})
+	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: pb.ThreadService_AppendThreadEvent_FullMethodName})
 	return metadata.NewIncomingContext(ctx, md)
 }

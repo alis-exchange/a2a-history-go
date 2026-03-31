@@ -8,9 +8,9 @@ import (
 
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/spanner"
-	"github.com/alis-exchange/go-alis-build/iam/v2"
 	"github.com/google/uuid"
-	v1 "go.alis.build/common/alis/a2a/extension/history/v1"
+	pb "go.alis.build/common/alis/a2a/extension/history/v1"
+	"go.alis.build/iam/v2"
 	"go.alis.build/validation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,7 +24,7 @@ const (
 	roleThreadAdmin  = "roles/thread.admin"
 )
 
-// SpannerStoreConfig selects the Spanner database and table names used by [SpannerService].
+// SpannerStoreConfig selects the Spanner database and table names used by [ThreadService].
 type SpannerStoreConfig struct {
 	Project      string // GCP project id
 	Instance     string // Spanner instance id
@@ -34,20 +34,18 @@ type SpannerStoreConfig struct {
 	EventsTable  string // table storing ThreadEvent proto rows (keys scoped under a thread)
 }
 
-var _ Service = (*SpannerService)(nil)
-
-// SpannerService is an implementation of [Service] for managing Thread and ThreadEvents via Google Cloud Spanner.
-type SpannerService struct {
+// ThreadService is an implementation for managing Thread and ThreadEvents via Google Cloud Spanner.
+type ThreadService struct {
 	db         *spanner.Client
 	historyTbl string
 	eventsTbl  string
 	authorizer *iam.IAM
-	v1.UnimplementedThreadServiceServer
+	pb.UnimplementedThreadServiceServer
 }
 
-// NewSpannerService constructs a [SpannerService] with a Spanner client and IAM authorizer wired to
+// NewThreadService constructs a [ThreadService] with a Spanner client and IAM authorizer wired to
 // the ThreadService RPC names used by this module.
-func NewSpannerService(ctx context.Context, config *SpannerStoreConfig) (*SpannerService, error) {
+func NewThreadService(ctx context.Context, config *SpannerStoreConfig) (*ThreadService, error) {
 	dbName := fmt.Sprintf("projects/%s/instances/%s/databases/%s", config.Project, config.Instance, config.Database)
 
 	db, err := spanner.NewClientWithConfig(ctx, dbName, spanner.ClientConfig{
@@ -62,23 +60,23 @@ func NewSpannerService(ctx context.Context, config *SpannerStoreConfig) (*Spanne
 		{
 			Name: roleOpen,
 			Permissions: []string{
-				v1.ThreadService_ListThreads_FullMethodName,
-				v1.ThreadService_AppendThreadEvent_FullMethodName,
+				pb.ThreadService_ListThreads_FullMethodName,
+				pb.ThreadService_AppendThreadEvent_FullMethodName,
 			},
 			AllUsers: true,
 		},
 		{
 			Name: roleThreadViewer,
 			Permissions: []string{
-				v1.ThreadService_GetThread_FullMethodName,
+				pb.ThreadService_GetThread_FullMethodName,
 			},
 			AllUsers: false,
 		},
 		{
 			Name: roleThreadAdmin,
 			Permissions: []string{
-				v1.ThreadService_GetThread_FullMethodName,
-				v1.ThreadService_ListThreadEvents_FullMethodName,
+				pb.ThreadService_GetThread_FullMethodName,
+				pb.ThreadService_ListThreadEvents_FullMethodName,
 			},
 			AllUsers: false,
 		},
@@ -87,7 +85,7 @@ func NewSpannerService(ctx context.Context, config *SpannerStoreConfig) (*Spanne
 		return nil, err
 	}
 
-	return &SpannerService{
+	return &ThreadService{
 		db:         db,
 		historyTbl: config.ThreadsTable,
 		eventsTbl:  config.EventsTable,
@@ -96,7 +94,7 @@ func NewSpannerService(ctx context.Context, config *SpannerStoreConfig) (*Spanne
 }
 
 // GetThread implements the [Service.GetThread] method.
-func (s *SpannerService) GetThread(ctx context.Context, req *v1.GetThreadRequest) (*v1.Thread, error) {
+func (s *ThreadService) GetThread(ctx context.Context, req *pb.GetThreadRequest) (*pb.Thread, error) {
 	// Authorize
 	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
 	if err != nil {
@@ -118,7 +116,7 @@ func (s *SpannerService) GetThread(ctx context.Context, req *v1.GetThreadRequest
 
 	// Check if the requester has access to this resource
 	az.AddPolicy(policy)
-	if !az.HasAccess(v1.ThreadService_GetThread_FullMethodName) {
+	if !az.HasAccess(pb.ThreadService_GetThread_FullMethodName) {
 		return nil, status.Errorf(codes.PermissionDenied, "you do not have permission to access this resource")
 	}
 
@@ -126,7 +124,7 @@ func (s *SpannerService) GetThread(ctx context.Context, req *v1.GetThreadRequest
 }
 
 // ListThreads implements the [Service.ListThreads] method.
-func (s *SpannerService) ListThreads(ctx context.Context, req *v1.ListThreadsRequest) (*v1.ListThreadsResponse, error) {
+func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequest) (*pb.ListThreadsResponse, error) {
 	// Authorize
 	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
 	if err != nil {
@@ -167,10 +165,10 @@ func (s *SpannerService) ListThreads(ctx context.Context, req *v1.ListThreadsReq
 	statement.Params["offset"] = offset
 
 	// make db hit and build up results
-	var resources []*v1.Thread
+	var resources []*pb.Thread
 	iterator := s.db.ReadOnlyTransaction().Query(ctx, statement)
 	if err := iterator.Do(func(r *spanner.Row) error {
-		history := &v1.Thread{}
+		history := &pb.Thread{}
 		if err := r.Columns(history); err != nil {
 			return err
 		}
@@ -186,14 +184,14 @@ func (s *SpannerService) ListThreads(ctx context.Context, req *v1.ListThreadsReq
 		nextPageToken = fmt.Sprintf("%d", offset+limit)
 	}
 
-	return &v1.ListThreadsResponse{
+	return &pb.ListThreadsResponse{
 		Threads:       resources,
 		NextPageToken: nextPageToken,
 	}, nil
 }
 
 // ListThreadEvents implements the [Service.ListThreadEvents] method.
-func (s *SpannerService) ListThreadEvents(ctx context.Context, req *v1.ListThreadEventsRequest) (*v1.ListThreadEventsResponse, error) {
+func (s *ThreadService) ListThreadEvents(ctx context.Context, req *pb.ListThreadEventsRequest) (*pb.ListThreadEventsResponse, error) {
 	// Validate
 	validator := validation.NewValidator()
 	validator.String("parent", req.GetParent()).IsPopulated().Matches(threadRegex)
@@ -233,10 +231,10 @@ func (s *SpannerService) ListThreadEvents(ctx context.Context, req *v1.ListThrea
 	}
 	statement.Params["offset"] = offset
 
-	var events []*v1.ThreadEvent
+	var events []*pb.ThreadEvent
 	iterator := s.db.ReadOnlyTransaction().Query(ctx, statement)
 	err = iterator.Do(func(r *spanner.Row) error {
-		event := &v1.ThreadEvent{}
+		event := &pb.ThreadEvent{}
 		if err := r.ColumnByName("Event", event); err != nil {
 			return err
 		}
@@ -252,14 +250,14 @@ func (s *SpannerService) ListThreadEvents(ctx context.Context, req *v1.ListThrea
 		nextPageToken = strconv.Itoa(offset + limit)
 	}
 
-	return &v1.ListThreadEventsResponse{
+	return &pb.ListThreadEventsResponse{
 		Events:        events,
 		NextPageToken: nextPageToken,
 	}, nil
 }
 
 // AppendThreadEvent implements the [Service.AppendThreadEvent] method.
-func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendThreadEventRequest) (*v1.AppendThreadEventResponse, error) {
+func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThreadEventRequest) (*pb.AppendThreadEventResponse, error) {
 	// Validation
 	validator := validation.NewValidator()
 	validator.MessageIsPopulated("event", req.GetEvent() != nil)
@@ -278,13 +276,13 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 
 	var ctxID string
 	switch req.GetEvent().GetPayload().(type) {
-	case *v1.ThreadEvent_ArtifactUpdate:
+	case *pb.ThreadEvent_ArtifactUpdate:
 		ctxID = req.GetEvent().GetArtifactUpdate().GetContextId()
-	case *v1.ThreadEvent_Message:
+	case *pb.ThreadEvent_Message:
 		ctxID = req.GetEvent().GetMessage().GetContextId()
-	case *v1.ThreadEvent_StatusUpdate:
+	case *pb.ThreadEvent_StatusUpdate:
 		ctxID = req.GetEvent().GetStatusUpdate().GetContextId()
-	case *v1.ThreadEvent_Task:
+	case *pb.ThreadEvent_Task:
 		ctxID = req.GetEvent().GetTask().GetContextId()
 	}
 	if ctxID == "" {
@@ -305,7 +303,7 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 			return nil, err
 		}
 		now := time.Now().UTC()
-		history := &v1.Thread{
+		history := &pb.Thread{
 			Name:        historyName,
 			DisplayName: now.Format(time.RFC3339),
 			AgentId:     req.GetAgentId(),
@@ -337,17 +335,17 @@ func (s *SpannerService) AppendThreadEvent(ctx context.Context, req *v1.AppendTh
 		return nil, err
 	}
 
-	return &v1.AppendThreadEventResponse{}, nil
+	return &pb.AppendThreadEventResponse{}, nil
 }
 
 // readThread loads the Thread and Policy columns for a thread primary key, or returns the Spanner error
 // (typically NotFound if the row does not exist).
-func (s *SpannerService) readThread(ctx context.Context, name string) (*v1.Thread, *iampb.Policy, error) {
+func (s *ThreadService) readThread(ctx context.Context, name string) (*pb.Thread, *iampb.Policy, error) {
 	row, err := s.db.Single().ReadRow(ctx, s.historyTbl, spanner.Key{name}, []string{"Thread", "Policy"})
 	if err != nil {
 		return nil, nil, err
 	}
-	history := &v1.Thread{}
+	history := &pb.Thread{}
 	policy := &iampb.Policy{}
 
 	if err := row.Columns(history, policy); err != nil {
