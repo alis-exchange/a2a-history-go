@@ -75,7 +75,7 @@ func (i *interceptor) Before(ctx context.Context, callCtx *sdka2asrv.CallContext
 	}
 
 	// Activate the extension
-	callCtx.Extensions().Activate(AgentExtension)
+	callCtx.Extensions().Activate(&AgentExtension)
 
 	// Check if payload is nil
 	if req.Payload == nil {
@@ -133,7 +133,7 @@ func (i *interceptor) Before(ctx context.Context, callCtx *sdka2asrv.CallContext
 // flushes a deferred SendMessage using the response context id, then appends the response event when present.
 func (i *interceptor) After(ctx context.Context, callCtx *sdka2asrv.CallContext, resp *sdka2asrv.Response) error {
 	// Check that the extension is active
-	if !callCtx.Extensions().Active(AgentExtension) {
+	if !callCtx.Extensions().Active(&AgentExtension) {
 		return nil
 	}
 
