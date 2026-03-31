@@ -1,4 +1,4 @@
-package srv
+package a2asrv
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
-	"github.com/a2aproject/a2a-go/v2/a2asrv"
+	sdka2asrv "github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/google/uuid"
 	"go.alis.build/a2a/extension/history/service"
 	pb "go.alis.build/common/alis/a2a/extension/history/v1"
@@ -24,10 +24,10 @@ func (k invocationKeyType) String() string {
 var invocationKey = invocationKeyType{}
 
 const (
-	extensionURI = "https://github.com/alis-exchange/a2a-history-go/alis/a2a/extension/history/v1"
+	extensionURI = "https://a2a.alis.build/extensions/history/v1"
 )
 
-var _ a2asrv.CallInterceptor = (*interceptor)(nil)
+var _ sdka2asrv.CallInterceptor = (*interceptor)(nil)
 
 type interceptor struct {
 	service service.ThreadService
@@ -73,7 +73,7 @@ func NewInterceptor(service service.ThreadService, opts ...InterceptorOption) *i
 // Before implements [a2asrv.CallInterceptor]: activates the history extension when requested, and for
 // SendMessage requests either appends immediately (when context id is present) or caches the event
 // and stores an invocation id on the returned context when context id is empty.
-func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, req *a2asrv.Request) (context.Context, any, error) {
+func (i *interceptor) Before(ctx context.Context, callCtx *sdka2asrv.CallContext, req *sdka2asrv.Request) (context.Context, any, error) {
 	// Check incoming request for extension activation
 	if !slices.Contains(callCtx.Extensions().RequestedURIs(), extensionURI) {
 		return ctx, nil, nil
@@ -136,7 +136,7 @@ func (i *interceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, r
 
 // After implements [a2asrv.CallInterceptor]: maps the response payload to a ThreadEvent, optionally
 // flushes a deferred SendMessage using the response context id, then appends the response event when present.
-func (i *interceptor) After(ctx context.Context, callCtx *a2asrv.CallContext, resp *a2asrv.Response) error {
+func (i *interceptor) After(ctx context.Context, callCtx *sdka2asrv.CallContext, resp *sdka2asrv.Response) error {
 	// Check that the extension is active
 	if !callCtx.Extensions().Active(&a2a.AgentExtension{URI: extensionURI}) {
 		return nil
@@ -264,12 +264,21 @@ func (i *interceptor) popCached(invocationID string) {
 
 // injectGrpcMetadata injects all incoming headers and set them in gRPC metadata so that
 // downstream service calls can use them.
-func (i *interceptor) injectGrpcMetadata(ctx context.Context, callCtx *a2asrv.CallContext) context.Context {
+func (i *interceptor) injectGrpcMetadata(ctx context.Context, callCtx *sdka2asrv.CallContext) context.Context {
 	md := metadata.MD{}
 	for k, v := range callCtx.ServiceParams().List() {
 		md[k] = v
 	}
 
-	ctx = grpc.NewContextWithServerTransportStream(ctx, &jsonrpcStream{method: pb.ThreadService_AppendThreadEvent_FullMethodName})
+	ctx = grpc.NewContextWithServerTransportStream(ctx, &grpcMethodStream{method: pb.ThreadService_AppendThreadEvent_FullMethodName})
 	return metadata.NewIncomingContext(ctx, md)
 }
+
+type grpcMethodStream struct {
+	method string
+}
+
+func (s *grpcMethodStream) Method() string                  { return s.method }
+func (s *grpcMethodStream) SetHeader(md metadata.MD) error  { return nil }
+func (s *grpcMethodStream) SendHeader(md metadata.MD) error { return nil }
+func (s *grpcMethodStream) SetTrailer(md metadata.MD) error { return nil }

@@ -1,4 +1,4 @@
-package srv
+package a2asrv
 
 import (
 	"fmt"
@@ -281,7 +281,7 @@ func toProtoTaskStatus(status a2a.TaskStatus) (*a2apb.TaskStatus, error) {
 		Message: message,
 	}
 	if status.Timestamp != nil {
-		pStatus.Timestamp =  timestamppb.New(*status.Timestamp)
+		pStatus.Timestamp = timestamppb.New(*status.Timestamp)
 	}
 
 	return pStatus, nil

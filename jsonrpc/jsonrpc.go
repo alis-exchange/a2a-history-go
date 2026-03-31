@@ -1,10 +1,9 @@
-package srv
+package jsonrpc
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 
@@ -111,13 +110,13 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	defer func() {
 		if err := req.Body.Close(); err != nil {
-			log.Fatal(ctx, "failed to close request body", err)
+			alog.Alertf(ctx, "failed to close request body: %v", err)
 		}
 	}()
 
 	var payload jsonrpcRequest
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-		h.writeJSONRPCError(ctx, rw, ErrInvalidRequest{err: err}, payload.ID)
+		h.writeJSONRPCError(ctx, rw, ErrParseError{err: err}, payload.ID)
 		return
 	}
 
@@ -137,7 +136,7 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	h.handleRequest(ctx, rw, &payload)
 }
 
-// handleRequest unmarshals params with [jsonrpcUnmarshaler], calls [service.Service], then either
+// handleRequest unmarshals params with [jsonrpcUnmarshaler], calls [service.ThreadService], then either
 // marshals the protobuf result with [jsonrpcMarshaler] into the JSON-RPC result field or writes
 // an error via [jsonrpcHandler.writeJSONRPCError].
 func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWriter, req *jsonrpcRequest) {
@@ -221,7 +220,7 @@ func (h *jsonrpcHandler) writeJSONRPCError(ctx context.Context, rw http.Response
 	}
 }
 
-// grpcToJSONRPCError maps google.golang.org/grpc/status codes from the history [service.Service]
+// grpcToJSONRPCError maps google.golang.org/grpc/status codes from the history [service.ThreadService]
 // (for example NotFound, InvalidArgument) to [JSONRPCError] values, using -326xx standard codes
 // where they apply and -320xx implementation-defined codes for auth, permission, and not-found.
 func (h *jsonrpcHandler) grpcToJSONRPCError(st *status.Status) JSONRPCError {
@@ -242,7 +241,7 @@ func (h *jsonrpcHandler) grpcToJSONRPCError(st *status.Status) JSONRPCError {
 }
 
 // NewJSONRPCHandler returns an [http.Handler] that implements JSON-RPC 2.0 for the history API
-// (ListThreads, GetThread, ListThreadEvents). The service must implement [service.Service].
+// (ListThreads, GetThread, ListThreadEvents). The service must implement [service.ThreadService].
 // Request params and response results are protobuf JSON (protojson): camelCase keys, unknown fields
 // ignored on input, unpopulated fields included on output. gRPC status errors from the service are
 // mapped to JSON-RPC errors. Pass [WithCORS] (and [CORSAllowOrigin] / [CORSAllowHeaders] / [CORSAllowMethods])

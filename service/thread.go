@@ -180,7 +180,7 @@ func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequ
 
 	// determine next page token
 	nextPageToken := ""
-	if len(resources) < limit {
+	if len(resources) == limit {
 		nextPageToken = fmt.Sprintf("%d", offset+limit)
 	}
 

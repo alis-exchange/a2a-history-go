@@ -22,7 +22,7 @@ The `a2a-history` extension addresses this by:
 
 The URI for this extension is:
 
-`https://github.com/alis-exchange/a2a-history-go/alis/a2a/extension/history/v1`. 
+`https://a2a.alis.build/extensions/history/v1`.
 
 The following is sample of an AgentCard advertising support for this extension:
 
@@ -33,7 +33,7 @@ The following is sample of an AgentCard advertising support for this extension:
   "capabilities": {
     "extensions": [
       {
-        "uri": "https://github.com/alis-exchange/a2a-history-go/alis/a2a/extension/history/v1/spec.md",
+        "uri": "https://a2a.alis.build/extensions/history/v1",
         "description": "",
         "required": false
       }
