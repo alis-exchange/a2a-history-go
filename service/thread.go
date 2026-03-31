@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
@@ -12,6 +14,7 @@ import (
 	pb "go.alis.build/common/alis/a2a/extension/history/v1"
 	"go.alis.build/iam/v2"
 	"go.alis.build/validation"
+	"google.golang.org/genai"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -22,6 +25,8 @@ const (
 	roleOpen         = "roles/open"
 	roleThreadViewer = "roles/thread.viewer"
 	roleThreadAdmin  = "roles/thread.admin"
+	titleModel       = "gemini-2.5-flash-lite"
+	titleLocation    = "global"
 )
 
 // SpannerStoreConfig selects the Spanner database and table names used by [ThreadService].
@@ -36,10 +41,11 @@ type SpannerStoreConfig struct {
 
 // ThreadService is an implementation for managing Thread and ThreadEvents via Google Cloud Spanner.
 type ThreadService struct {
-	db         *spanner.Client
-	historyTbl string
-	eventsTbl  string
-	authorizer *iam.IAM
+	db           *spanner.Client
+	historyTbl   string
+	eventsTbl    string
+	geminiClient *genai.Client
+	authorizer   *iam.IAM
 	pb.UnimplementedThreadServiceServer
 }
 
@@ -85,15 +91,32 @@ func NewThreadService(ctx context.Context, config *SpannerStoreConfig) (*ThreadS
 		return nil, err
 	}
 
+	var geminiClient *genai.Client
+	projectID := strings.TrimSpace(os.Getenv("ALIS_OS_PROJECT"))
+	if projectID == "" {
+		projectID = strings.TrimSpace(config.Project)
+	}
+	if projectID != "" {
+		geminiClient, err = genai.NewClient(ctx, &genai.ClientConfig{
+			Backend:  genai.BackendVertexAI,
+			Project:  projectID,
+			Location: titleLocation,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &ThreadService{
-		db:         db,
-		historyTbl: config.ThreadsTable,
-		eventsTbl:  config.EventsTable,
-		authorizer: authorizer,
+		db:           db,
+		historyTbl:   config.ThreadsTable,
+		eventsTbl:    config.EventsTable,
+		geminiClient: geminiClient,
+		authorizer:   authorizer,
 	}, nil
 }
 
-// GetThread implements the [Service.GetThread] method.
+// GetThread implements the [ThreadService.GetThread] method.
 func (s *ThreadService) GetThread(ctx context.Context, req *pb.GetThreadRequest) (*pb.Thread, error) {
 	// Authorize
 	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
@@ -123,7 +146,7 @@ func (s *ThreadService) GetThread(ctx context.Context, req *pb.GetThreadRequest)
 	return history, nil
 }
 
-// ListThreads implements the [Service.ListThreads] method.
+// ListThreads implements the [ThreadService.ListThreads] method.
 func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequest) (*pb.ListThreadsResponse, error) {
 	// Authorize
 	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
@@ -190,7 +213,7 @@ func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequ
 	}, nil
 }
 
-// ListThreadEvents implements the [Service.ListThreadEvents] method.
+// ListThreadEvents implements the [ThreadService.ListThreadEvents] method.
 func (s *ThreadService) ListThreadEvents(ctx context.Context, req *pb.ListThreadEventsRequest) (*pb.ListThreadEventsResponse, error) {
 	// Validate
 	validator := validation.NewValidator()
@@ -256,7 +279,7 @@ func (s *ThreadService) ListThreadEvents(ctx context.Context, req *pb.ListThread
 	}, nil
 }
 
-// AppendThreadEvent implements the [Service.AppendThreadEvent] method.
+// AppendThreadEvent implements the [ThreadService.AppendThreadEvent] method.
 func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThreadEventRequest) (*pb.AppendThreadEventResponse, error) {
 	// Validation
 	validator := validation.NewValidator()
@@ -305,7 +328,7 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 		now := time.Now().UTC()
 		history := &pb.Thread{
 			Name:        historyName,
-			DisplayName: now.Format(time.RFC3339),
+			DisplayName: s.generateThreadDisplayName(ctx, req.GetEvent(), now),
 			AgentId:     req.GetAgentId(),
 			CreateTime:  timestamppb.Now(),
 		}
@@ -354,4 +377,61 @@ func (s *ThreadService) readThread(ctx context.Context, name string) (*pb.Thread
 		return nil, nil, status.Errorf(codes.Internal, "decoding thread %q: %v", name, err)
 	}
 	return history, policy, nil
+}
+
+// generateThreadDisplayName derives a user-facing thread title from the initial message via Gemini,
+// falling back to the timestamp string when no prompt text is available or generation fails.
+func (s *ThreadService) generateThreadDisplayName(ctx context.Context, event *pb.ThreadEvent, now time.Time) string {
+	fallback := now.Format(time.RFC3339)
+	promptText := extractTitlePrompt(event)
+	if promptText == "" {
+		return fallback
+	}
+	if s.geminiClient == nil {
+		return fallback
+	}
+
+	prompt := fmt.Sprintf(`You create short conversation titles.
+Return a concise title of at most 8 words.
+Do not use quotes or punctuation unless necessary.
+User message:
+%s`, promptText)
+
+	resp, err := s.geminiClient.Models.GenerateContent(ctx, titleModel, genai.Text(prompt), &genai.GenerateContentConfig{})
+	if err != nil {
+		return fallback
+	}
+
+	title := strings.TrimSpace(resp.Text())
+	title = strings.Trim(title, `"'`)
+	if title == "" {
+		return fallback
+	}
+	return title
+}
+
+// extractTitlePrompt returns a compact text prompt from the event's message parts for title generation.
+func extractTitlePrompt(event *pb.ThreadEvent) string {
+	if event == nil || event.GetMessage() == nil {
+		return ""
+	}
+
+	parts := event.GetMessage().GetParts()
+	textParts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		text := strings.TrimSpace(part.GetText())
+		if text == "" {
+			continue
+		}
+		textParts = append(textParts, text)
+		if len(strings.Join(textParts, " ")) >= 500 {
+			break
+		}
+	}
+
+	prompt := strings.TrimSpace(strings.Join(textParts, " "))
+	if len(prompt) > 500 {
+		prompt = strings.TrimSpace(prompt[:500])
+	}
+	return prompt
 }
