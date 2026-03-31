@@ -8,7 +8,6 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	sdka2asrv "github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/google/uuid"
-	"go.alis.build/a2a/extension/history/service"
 	pb "go.alis.build/common/alis/a2a/extension/history/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -23,14 +22,10 @@ func (k invocationKeyType) String() string {
 
 var invocationKey = invocationKeyType{}
 
-const (
-	extensionURI = "https://a2a.alis.build/extensions/history/v1"
-)
-
 var _ sdka2asrv.CallInterceptor = (*interceptor)(nil)
 
 type interceptor struct {
-	service service.ThreadService
+	service pb.ThreadServiceServer
 	agentID string
 	mu      sync.Mutex
 	store   map[string]*pb.ThreadEvent
@@ -58,7 +53,7 @@ func WithAgentID(agentID string) InterceptorOption {
 // See package documentation for Before/After behavior and deferred SendMessage handling.
 //
 // A2A middleware: https://github.com/a2aproject/a2a-go/blob/main/a2asrv/middleware.go
-func NewInterceptor(service service.ThreadService, opts ...InterceptorOption) *interceptor {
+func NewInterceptor(service pb.ThreadServiceServer, opts ...InterceptorOption) *interceptor {
 	options := &InterceptorOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -75,12 +70,12 @@ func NewInterceptor(service service.ThreadService, opts ...InterceptorOption) *i
 // and stores an invocation id on the returned context when context id is empty.
 func (i *interceptor) Before(ctx context.Context, callCtx *sdka2asrv.CallContext, req *sdka2asrv.Request) (context.Context, any, error) {
 	// Check incoming request for extension activation
-	if !slices.Contains(callCtx.Extensions().RequestedURIs(), extensionURI) {
+	if !slices.Contains(callCtx.Extensions().RequestedURIs(), AgentExtension.URI) {
 		return ctx, nil, nil
 	}
 
 	// Activate the extension
-	callCtx.Extensions().Activate(&a2a.AgentExtension{URI: extensionURI})
+	callCtx.Extensions().Activate(AgentExtension)
 
 	// Check if payload is nil
 	if req.Payload == nil {
@@ -138,7 +133,7 @@ func (i *interceptor) Before(ctx context.Context, callCtx *sdka2asrv.CallContext
 // flushes a deferred SendMessage using the response context id, then appends the response event when present.
 func (i *interceptor) After(ctx context.Context, callCtx *sdka2asrv.CallContext, resp *sdka2asrv.Response) error {
 	// Check that the extension is active
-	if !callCtx.Extensions().Active(&a2a.AgentExtension{URI: extensionURI}) {
+	if !callCtx.Extensions().Active(AgentExtension) {
 		return nil
 	}
 
