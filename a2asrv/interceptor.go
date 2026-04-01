@@ -200,7 +200,8 @@ func (i *interceptor) After(ctx context.Context, callCtx *sdka2asrv.CallContext,
 			if ok && p != nil && p.Message != nil && contextID != "" {
 				// Update the contextID
 				p.Message.ContextId = contextID
-				_, err := i.service.AppendThreadEvent(ctx, &pb.AppendThreadEventRequest{
+				appendCtx := i.injectGrpcMetadata(ctx, callCtx)
+				_, err := i.service.AppendThreadEvent(appendCtx, &pb.AppendThreadEventRequest{
 					Event:   ev,
 					AgentId: i.agentID,
 				})
@@ -224,7 +225,8 @@ func (i *interceptor) After(ctx context.Context, callCtx *sdka2asrv.CallContext,
 	}
 
 	// Capture the event
-	_, err := i.service.AppendThreadEvent(ctx, &pb.AppendThreadEventRequest{
+	appendCtx := i.injectGrpcMetadata(ctx, callCtx)
+	_, err := i.service.AppendThreadEvent(appendCtx, &pb.AppendThreadEventRequest{
 		Event:   event,
 		AgentId: i.agentID,
 	})
