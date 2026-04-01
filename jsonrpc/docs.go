@@ -5,6 +5,7 @@
 // Optional [WithCORS] enables browser cross-origin access. Params and results use protojson
 // (camelCase JSON on the wire; unknown fields discarded on input; unpopulated fields emitted on output).
 // gRPC status errors from the service are mapped to JSON-RPC error responses with appropriate codes.
+// [Register] mounts the handler on method-aware muxes such as the Go 1.22+ ServeMux.
 //
 // # JSON-RPC handler
 //

@@ -200,10 +200,23 @@ import "go.alis.build/a2a/extension/history/jsonrpc"
 mux.Handle(jsonrpc.HistoryExtensionPath, jsonrpc.NewJSONRPCHandler(historyService))
 ```
 
+If you use a method-aware mux such as Go 1.22+ `http.ServeMux`, you can let the package mount the
+history endpoint for you:
+
+```go
+jsonrpc.Register(mux, historyService)
+```
+
 Browser clients crossing origins need CORS on the JSON-RPC responses and an OPTIONS preflight. Pass [`jsonrpc.WithCORS`](jsonrpc/cors.go) (defaults: `Access-Control-Allow-Origin: *`, `POST` and `OPTIONS`, and common `Content-Type` / `Authorization` / Alis `X-Alis-*` headers):
 
 ```go
 mux.Handle(jsonrpc.HistoryExtensionPath, jsonrpc.NewJSONRPCHandler(historyService, jsonrpc.WithCORS()))
+```
+
+With a method-aware mux, the helper can register the same endpoint with CORS enabled:
+
+```go
+jsonrpc.Register(mux, historyService, jsonrpc.WithCORS())
 ```
 
 Override origin or allowed headers/methods with [`jsonrpc.CORSAllowOrigin`](jsonrpc/cors.go), [`jsonrpc.CORSAllowHeaders`](jsonrpc/cors.go), and [`jsonrpc.CORSAllowMethods`](jsonrpc/cors.go):
