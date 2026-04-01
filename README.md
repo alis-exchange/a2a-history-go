@@ -72,6 +72,13 @@ historyService, err := service.NewThreadService(ctx, &service.SpannerStoreConfig
 })
 ```
 
+Register it on your gRPC server without importing the generated history proto package:
+
+```go
+grpcServer := grpc.NewServer()
+historyService.Register(grpcServer)
+```
+
 Below is Terraform aligned with `ThreadService` expectations (proto columns, foreign key).
 
 ```hcl

@@ -9,6 +9,9 @@
 //   - roles/thread.viewer — GetThread when the caller’s policy member is bound on the thread.
 //   - roles/thread.admin — GetThread and ListThreadEvents for threads where the caller is admin.
 //
+// [ThreadService.Register] wraps the generated gRPC registration helper so callers can mount the
+// service without importing the generated protobuf package directly.
+//
 // Thread names must match `^threads/[a-z0-9-]{2,50}$`. [AppendThreadEvent] derives the thread key
 // from the context id inside the event payload, ensures the thread row exists (inserting it with
 // IAM policy on first write), assigns a unique event name, and inserts the event in one transaction.
