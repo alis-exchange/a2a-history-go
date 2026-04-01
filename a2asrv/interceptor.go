@@ -8,7 +8,7 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	sdka2asrv "github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/google/uuid"
-	pb "go.alis.build/common/alis/a2a/extension/history/v1"
+	pb "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"

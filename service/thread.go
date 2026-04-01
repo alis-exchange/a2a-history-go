@@ -11,7 +11,7 @@ import (
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/spanner"
 	"github.com/google/uuid"
-	pb "go.alis.build/common/alis/a2a/extension/history/v1"
+	pb "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
 	"go.alis.build/iam/v2"
 	"go.alis.build/validation"
 	"google.golang.org/genai"

@@ -1,7 +1,7 @@
 package service
 
 import (
-	pb "go.alis.build/common/alis/a2a/extension/history/v1"
+	pb "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
 	"google.golang.org/grpc"
 )
 

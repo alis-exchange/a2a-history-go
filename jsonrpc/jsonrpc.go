@@ -9,7 +9,7 @@ import (
 
 	"go.alis.build/a2a/extension/history/service"
 	"go.alis.build/alog"
-	pb "go.alis.build/common/alis/a2a/extension/history/v1"
+	pb "go.alis.build/a2a/extension/history/alis/a2a/extension/history/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
-	a2apb "go.alis.build/common/lf/a2a/v1"
+	a2apb "github.com/a2aproject/a2a-go/v2/a2apb/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
