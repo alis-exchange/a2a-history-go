@@ -1,5 +1,7 @@
 # A2A HISTORY GO SDK
 
+![A2A History Go banner](banner.svg)
+
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 This project contains a lightweight Go library for developers supporting the [a2a-history](spec.md) A2A extension.
