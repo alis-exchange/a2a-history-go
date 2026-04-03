@@ -7,7 +7,7 @@
 //
 //   - roles/open — anonymous ListThreads and AppendThreadEvent (see code for exact RPC names).
 //   - roles/thread.viewer — GetThread when the caller’s policy member is bound on the thread.
-//   - roles/thread.admin — GetThread and ListThreadEvents for threads where the caller is admin.
+//   - roles/thread.admin — GetThread, ListThreadEvents, and DeleteThread for threads where the caller is admin.
 //
 // [ThreadService.Register] wraps the generated gRPC registration helper so callers can mount the
 // service without importing the generated protobuf package directly.
@@ -18,7 +18,7 @@
 //
 // # Code flow (ThreadService)
 //
-//	GetThread / ListThreadEvents: authorize → (validate) → read thread policy → check RPC permission.
+//	GetThread / ListThreadEvents / DeleteThread: authorize → (validate) → read thread policy → check RPC permission.
 //	ListThreads: authorize open RPC → query threads table (optionally filter by policy member).
 //	AppendThreadEvent: validate event → authorize → extract context id from payload → upsert thread + insert event.
 //

@@ -17,6 +17,7 @@ import (
 	"google.golang.org/genai"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -83,6 +84,7 @@ func NewThreadService(ctx context.Context, config *SpannerStoreConfig) (*ThreadS
 			Permissions: []string{
 				pb.ThreadService_GetThread_FullMethodName,
 				pb.ThreadService_ListThreadEvents_FullMethodName,
+				pb.ThreadService_DeleteThread_FullMethodName,
 			},
 			AllUsers: false,
 		},
@@ -144,6 +146,53 @@ func (s *ThreadService) GetThread(ctx context.Context, req *pb.GetThreadRequest)
 	}
 
 	return history, nil
+}
+
+// DeleteThread implements the [ThreadService.DeleteThread] method.
+func (s *ThreadService) DeleteThread(ctx context.Context, req *pb.DeleteThreadRequest) (*emptypb.Empty, error) {
+	// Validate
+	validator := validation.NewValidator()
+	validator.String("name", req.GetName()).IsPopulated().Matches(threadRegex)
+	if err := validator.Validate(); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	// Authorize
+	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
+	}
+
+	_, policy, err := s.readThread(ctx, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+
+	az.AddPolicy(policy)
+	if err := az.AuthorizeRpc(); err != nil {
+		return nil, err
+	}
+
+	eventsPrefix := req.GetName() + "/%"
+	if _, err := s.db.ReadWriteTransaction(ctx, func(ctx context.Context, rwt *spanner.ReadWriteTransaction) error {
+		if _, err := rwt.Update(ctx, spanner.Statement{
+			SQL:    fmt.Sprintf(`DELETE FROM %s WHERE key LIKE @eventsPrefix`, s.eventsTbl),
+			Params: map[string]any{"eventsPrefix": eventsPrefix},
+		}); err != nil {
+			return status.Errorf(codes.Internal, "deleting thread events for %q: %v", req.GetName(), err)
+		}
+		if _, err := rwt.Update(ctx, spanner.Statement{
+			SQL:    fmt.Sprintf(`DELETE FROM %s WHERE key = @name`, s.historyTbl),
+			Params: map[string]any{"name": req.GetName()},
+		}); err != nil {
+			return status.Errorf(codes.Internal, "deleting thread %q: %v", req.GetName(), err)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return &emptypb.Empty{}, nil
 }
 
 // ListThreads implements the [ThreadService.ListThreads] method.
