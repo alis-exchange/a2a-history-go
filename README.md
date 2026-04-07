@@ -46,7 +46,7 @@ flowchart LR
 ```
 
 1. **Interceptor path:** On each RPC, `Before` activates the history extension when the client requested it, converts `SendMessage` payloads to `ThreadEvent`s, and either appends immediately or defers until `After` has a `ContextID` from the response. `After` appends response-shaped events (task, message, status, artifact updates) and may append twice when a deferred user message is flushed first.
-2. **Storage semantics:** `AppendThreadEvent` assigns every event a unique monotonic `sequence` within its thread and updates thread state atomically (`next_sequence`, `latest_sequence`). `ListThreads` projects reader state for the caller; when the caller is the thread-owning admin, the service advances `read_sequence` to `latest_sequence` and clears `has_unread`.
+2. **Storage semantics:** `AppendThreadEvent` assigns every event a unique monotonic `sequence` within its thread and updates shared thread state atomically (`next_sequence`, `latest_sequence`). `ListThreads` returns caller-scoped `ThreadView` projections by joining `Thread` rows with per-user `UserThreadState` rows (`read_sequence`, `pinned`, `pinned_time`).
 3. **JSON-RPC path:** Browsers or tools call `GetThread`, `ListThreads`, `ListThreadEvents` over JSON-RPC 2.0 POST; the same `ThreadService` backs reads. Params and `result` use **protojson** (camelCase JSON; unknown fields are ignored on decode). Errors returned by the service as **gRPC statuses** are mapped to JSON-RPC error codes (for example `InvalidArgument` → invalid params, `NotFound` → not found). For cross-origin browsers, register the handler with `jsonrpc.WithCORS()` (or tailored `CORSAllow*` options).
 
 ## Installation
@@ -67,11 +67,12 @@ import (
 )
 
 historyService, err := service.NewThreadService(ctx, &service.SpannerStoreConfig{
-	Project:      "SPANNER_PROJECT_NAME",
-	Instance:     "SPANNER_INSTANCE_NAME",
-	Database:     "SPANNER_DATABASE_NAME",
-	ThreadsTable: "THREADS_TABLE_NAME",
-	EventsTable:  "EVENTS_TABLE_NAME",
+	Project:               "SPANNER_PROJECT_NAME",
+	Instance:              "SPANNER_INSTANCE_NAME",
+	Database:              "SPANNER_DATABASE_NAME",
+	ThreadsTable:          "THREADS_TABLE_NAME",
+	EventsTable:           "EVENTS_TABLE_NAME",
+	UserThreadStatesTable: "USER_THREAD_STATES_TABLE_NAME",
 })
 ```
 
@@ -161,12 +162,71 @@ resource "alis_google_spanner_table" "a2a_thread_events" {
   }
 }
 
+resource "alis_google_spanner_table" "a2a_user_thread_states" {
+  project         = "SPANNER_PROJECT_NAME"
+  instance        = "SPANNER_INSTANCE_NAME"
+  database        = "SPANNER_DATABASE_NAME"
+  name            = "USER_THREAD_STATES_TABLE_NAME"
+  schema = {
+    columns = [
+      {
+        name           = "key",
+        type           = "STRING",
+        is_primary_key = true,
+        required       = true
+      },
+      {
+        name          = "UserThreadState",
+        type          = "PROTO"
+        proto_package = "alis.a2a.extension.history.v1.UserThreadState"
+        required      = true
+      },
+      {
+        name            = "thread",
+        type            = "STRING",
+        required        = false
+        is_stored       = true
+        is_computed     = true
+        computation_ddl = "REGEXP_EXTRACT(UserThreadState.name, r'^(threads/[^/]+)')"
+      },
+      {
+        name            = "user",
+        type            = "STRING",
+        required        = false
+        is_stored       = true
+        is_computed     = true
+        computation_ddl = "UserThreadState.user"
+      },
+      {
+        name            = "update_time",
+        type            = "TIMESTAMP",
+        required        = false,
+        is_computed     = true,
+        computation_ddl = "TIMESTAMP_ADD(TIMESTAMP_SECONDS(UserThreadState.update_time.seconds),INTERVAL CAST(FLOOR(UserThreadState.update_time.nanos / 1000) AS INT64) MICROSECOND)",
+        is_stored       = true
+      },
+    ]
+  }
+}
+
 resource "alis_google_spanner_table_foreign_key" "a2a_thread_events_fk" {
   project           = "SPANNER_PROJECT_NAME"
   instance          = "SPANNER_INSTANCE_NAME"
   database          = "SPANNER_DATABASE_NAME"
   name              = "EVENT_FOREIGN_KEY_NAME"
   table             = "EVENTS_TABLE_NAME"
+  column            = "thread"
+  referenced_table  = alis_google_spanner_table.a2a_thread.name
+  referenced_column = "key"
+  on_delete         = "CASCADE"
+}
+
+resource "alis_google_spanner_table_foreign_key" "a2a_user_thread_states_fk" {
+  project           = "SPANNER_PROJECT_NAME"
+  instance          = "SPANNER_INSTANCE_NAME"
+  database          = "SPANNER_DATABASE_NAME"
+  name              = "USER_THREAD_STATE_FOREIGN_KEY_NAME"
+  table             = "USER_THREAD_STATES_TABLE_NAME"
   column            = "thread"
   referenced_table  = alis_google_spanner_table.a2a_thread.name
   referenced_column = "key"
@@ -237,6 +297,6 @@ mux.Handle(jsonrpc.HistoryExtensionPath, jsonrpc.NewJSONRPCHandler(historyServic
 ## Documentation
 
 - See [`service/docs.go`](service/docs.go), [`a2asrv/docs.go`](a2asrv/docs.go), and [`jsonrpc/docs.go`](jsonrpc/docs.go) for method-level flows, IAM roles, and transport semantics.
-- Reader view fields are part of the persisted `Thread` proto. `latest_sequence` is shared thread state; `read_sequence` and `has_unread` are maintained by the service for the owning admin caller during `ListThreads`.
+- Reader/pin state lives in per-user `UserThreadState` rows. `ListThreads` returns `ThreadView` objects that derive `has_unread` from `Thread.latest_sequence` and the caller's `UserThreadState.read_sequence`.
 - `ThreadEvent.sequence` is a stable per-thread cursor assigned by the service during `AppendThreadEvent`.
 - Proto definitions: `alis/a2a/extension/history/v1` in this module.

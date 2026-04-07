@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -33,21 +32,23 @@ const (
 
 // SpannerStoreConfig selects the Spanner database and table names used by [ThreadService].
 type SpannerStoreConfig struct {
-	Project      string // GCP project id
-	Instance     string // Spanner instance id
-	Database     string // Spanner database id
-	DatabaseRole string // optional Spanner database role for fine-grained access (empty if unused)
-	ThreadsTable string // table storing Thread + IAM Policy proto columns
-	EventsTable  string // table storing ThreadEvent proto rows (keys scoped under a thread)
+	Project               string // GCP project id
+	Instance              string // Spanner instance id
+	Database              string // Spanner database id
+	DatabaseRole          string // optional Spanner database role for fine-grained access (empty if unused)
+	ThreadsTable          string // table storing Thread + IAM Policy proto columns
+	EventsTable           string // table storing ThreadEvent proto rows (keys scoped under a thread)
+	UserThreadStatesTable string // table storing UserThreadState proto rows keyed by thread/user
 }
 
 // ThreadService is an implementation for managing Thread and ThreadEvents via Google Cloud Spanner.
 type ThreadService struct {
-	db           *spanner.Client
-	historyTbl   string
-	eventsTbl    string
-	geminiClient *genai.Client
-	authorizer   *iam.IAM
+	db            *spanner.Client
+	historyTbl    string
+	eventsTbl     string
+	userStatesTbl string
+	geminiClient  *genai.Client
+	authorizer    *iam.IAM
 	pb.UnimplementedThreadServiceServer
 }
 
@@ -70,6 +71,8 @@ func NewThreadService(ctx context.Context, config *SpannerStoreConfig) (*ThreadS
 			Permissions: []string{
 				pb.ThreadService_ListThreads_FullMethodName,
 				pb.ThreadService_AppendThreadEvent_FullMethodName,
+				pb.ThreadService_GetUserThreadState_FullMethodName,
+				pb.ThreadService_UpdateUserThreadState_FullMethodName,
 			},
 			AllUsers: true,
 		},
@@ -111,11 +114,12 @@ func NewThreadService(ctx context.Context, config *SpannerStoreConfig) (*ThreadS
 	}
 
 	return &ThreadService{
-		db:           db,
-		historyTbl:   config.ThreadsTable,
-		eventsTbl:    config.EventsTable,
-		geminiClient: geminiClient,
-		authorizer:   authorizer,
+		db:            db,
+		historyTbl:    config.ThreadsTable,
+		eventsTbl:     config.EventsTable,
+		userStatesTbl: config.UserThreadStatesTable,
+		geminiClient:  geminiClient,
+		authorizer:    authorizer,
 	}, nil
 }
 
@@ -175,12 +179,21 @@ func (s *ThreadService) DeleteThread(ctx context.Context, req *pb.DeleteThreadRe
 	}
 
 	eventsPrefix := req.GetName() + "/%"
+	userStatesPrefix := req.GetName() + "/userStates/%"
 	if _, err := s.db.ReadWriteTransaction(ctx, func(ctx context.Context, rwt *spanner.ReadWriteTransaction) error {
 		if _, err := rwt.Update(ctx, spanner.Statement{
 			SQL:    fmt.Sprintf(`DELETE FROM %s WHERE key LIKE @eventsPrefix`, s.eventsTbl),
 			Params: map[string]any{"eventsPrefix": eventsPrefix},
 		}); err != nil {
 			return status.Errorf(codes.Internal, "deleting thread events for %q: %v", req.GetName(), err)
+		}
+		if s.userStatesTbl != "" {
+			if _, err := rwt.Update(ctx, spanner.Statement{
+				SQL:    fmt.Sprintf(`DELETE FROM %s WHERE key LIKE @userStatesPrefix`, s.userStatesTbl),
+				Params: map[string]any{"userStatesPrefix": userStatesPrefix},
+			}); err != nil {
+				return status.Errorf(codes.Internal, "deleting user thread state for %q: %v", req.GetName(), err)
+			}
 		}
 		if _, err := rwt.Update(ctx, spanner.Statement{
 			SQL:    fmt.Sprintf(`DELETE FROM %s WHERE key = @name`, s.historyTbl),
@@ -196,9 +209,8 @@ func (s *ThreadService) DeleteThread(ctx context.Context, req *pb.DeleteThreadRe
 	return &emptypb.Empty{}, nil
 }
 
-// ListThreads implements the [ThreadService.ListThreads] method and projects caller read state on
-// returned threads. For thread admins, it advances read_sequence to latest_sequence and clears
-// has_unread before returning.
+// ListThreads implements the [ThreadService.ListThreads] method and projects caller user-thread
+// state onto returned thread views.
 func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequest) (*pb.ListThreadsResponse, error) {
 	// Authorize
 	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
@@ -240,22 +252,12 @@ func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequ
 	statement.Params["offset"] = offset
 
 	// make db hit and build up results
-	var (
-		threads          []*pb.Thread
-		ownerThreadNames = map[string]struct{}{}
-	)
+	var threads []*pb.Thread
 	iterator := s.db.ReadOnlyTransaction().Query(ctx, statement)
 	if err := iterator.Do(func(r *spanner.Row) error {
-		thread, policy, err := decodeThreadRow(r)
+		thread, _, err := decodeThreadRow(r)
 		if err != nil {
 			return err
-		}
-		if !az.Identity.IsDeploymentServiceAccount() && policyHasMemberRole(policy, az.Identity.PolicyMember(), roleThreadAdmin) {
-			thread.ReadSequence = thread.GetLatestSequence()
-			thread.HasUnread = false
-			ownerThreadNames[thread.GetName()] = struct{}{}
-		} else {
-			thread.HasUnread = thread.GetReadSequence() < thread.GetLatestSequence()
 		}
 		threads = append(threads, thread)
 		return nil
@@ -263,19 +265,9 @@ func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequ
 		return nil, status.Errorf(codes.Internal, "querying database: %v", err)
 	}
 
-	if len(ownerThreadNames) > 0 {
-		mutations := make([]*spanner.Mutation, 0, len(ownerThreadNames))
-		for _, history := range threads {
-			if _, ok := ownerThreadNames[history.GetName()]; !ok {
-				continue
-			}
-			mutations = append(mutations, spanner.Update(s.historyTbl, []string{"key", "Thread"}, []any{history.GetName(), history}))
-		}
-		if len(mutations) > 0 {
-			if _, err := s.db.Apply(ctx, mutations); err != nil {
-				return nil, status.Errorf(codes.Internal, "updating thread read state: %v", err)
-			}
-		}
+	userStates, err := s.readUserThreadStates(ctx, currentUserResource(az.Identity), threads)
+	if err != nil {
+		return nil, err
 	}
 
 	// determine next page token
@@ -284,10 +276,176 @@ func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequ
 		nextPageToken = fmt.Sprintf("%d", offset+limit)
 	}
 
+	views := make([]*pb.ThreadView, 0, len(threads))
+	for _, thread := range threads {
+		state := userStates[thread.GetName()]
+		view := &pb.ThreadView{
+			Thread: thread,
+		}
+		if state != nil {
+			view.ReadSequence = state.GetReadSequence()
+			view.Pinned = state.GetPinned()
+			view.PinnedTime = state.GetPinnedTime()
+		}
+		view.HasUnread = thread.GetLatestSequence() > view.GetReadSequence()
+		views = append(views, view)
+	}
+
 	return &pb.ListThreadsResponse{
-		Threads:       threads,
+		Threads:       views,
 		NextPageToken: nextPageToken,
 	}, nil
+}
+
+// GetUserThreadState implements the [ThreadService.GetUserThreadState] method.
+func (s *ThreadService) GetUserThreadState(ctx context.Context, req *pb.GetUserThreadStateRequest) (*pb.UserThreadState, error) {
+	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
+	}
+	if err = az.AuthorizeRpc(); err != nil {
+		return nil, err
+	}
+
+	threadName, userID, err := parseUserThreadStateName(req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	userResource, err := requireCurrentUserResource(az.Identity)
+	if err != nil {
+		return nil, err
+	}
+	if userID != userIDFromResource(userResource) {
+		return nil, status.Error(codes.PermissionDenied, "you may only access your own thread state")
+	}
+
+	_, policy, err := s.readThread(ctx, threadName)
+	if err != nil {
+		return nil, err
+	}
+	az.AddPolicy(policy)
+	if !az.HasAccess(pb.ThreadService_ListThreads_FullMethodName) {
+		return nil, status.Error(codes.PermissionDenied, "you do not have permission to access this thread")
+	}
+
+	state, err := s.readUserThreadState(ctx, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
+// UpdateUserThreadState implements the [ThreadService.UpdateUserThreadState] method.
+func (s *ThreadService) UpdateUserThreadState(ctx context.Context, req *pb.UpdateUserThreadStateRequest) (*pb.UserThreadState, error) {
+	validator := validation.NewValidator()
+	validator.MessageIsPopulated("user_thread_state", req.GetUserThreadState() != nil)
+	if err := validator.Validate(); err != nil {
+		return nil, err
+	}
+
+	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
+	}
+	if err = az.AuthorizeRpc(); err != nil {
+		return nil, err
+	}
+
+	userResource, err := requireCurrentUserResource(az.Identity)
+	if err != nil {
+		return nil, err
+	}
+	threadName := req.GetUserThreadState().GetThread()
+	if threadName == "" {
+		parsedThread, _, parseErr := parseUserThreadStateName(req.GetUserThreadState().GetName())
+		if parseErr != nil {
+			return nil, status.Error(codes.InvalidArgument, "user_thread_state.thread is required")
+		}
+		threadName = parsedThread
+	}
+	if !validThreadName(threadName) {
+		return nil, status.Error(codes.InvalidArgument, "invalid user_thread_state.thread")
+	}
+	if req.GetUserThreadState().GetUser() != "" && req.GetUserThreadState().GetUser() != userResource {
+		return nil, status.Error(codes.PermissionDenied, "you may only update your own thread state")
+	}
+	stateName := req.GetUserThreadState().GetName()
+	if stateName == "" {
+		stateName = userThreadStateName(threadName, userResource)
+	}
+	parsedThread, userID, err := parseUserThreadStateName(stateName)
+	if err != nil {
+		return nil, err
+	}
+	if parsedThread != threadName || userID != userIDFromResource(userResource) {
+		return nil, status.Error(codes.PermissionDenied, "user_thread_state.name must match the current user and thread")
+	}
+
+	thread, policy, err := s.readThread(ctx, threadName)
+	if err != nil {
+		return nil, err
+	}
+	az.AddPolicy(policy)
+	if !az.HasAccess(pb.ThreadService_ListThreads_FullMethodName) {
+		return nil, status.Error(codes.PermissionDenied, "you do not have permission to access this thread")
+	}
+
+	now := timestamppb.Now()
+	state := &pb.UserThreadState{
+		Name:       stateName,
+		Thread:     threadName,
+		User:       userResource,
+		UpdateTime: now,
+	}
+	existing, err := s.readUserThreadState(ctx, stateName)
+	if err != nil && status.Code(err) != codes.NotFound {
+		return nil, err
+	}
+	if existing != nil {
+		state.ReadSequence = existing.GetReadSequence()
+		state.Pinned = existing.GetPinned()
+		state.PinnedTime = existing.GetPinnedTime()
+	}
+
+	updatePaths := req.GetUpdateMask().GetPaths()
+	if len(updatePaths) == 0 {
+		updatePaths = []string{"read_sequence", "pinned", "pinned_time"}
+	}
+	for _, path := range updatePaths {
+		switch path {
+		case "read_sequence":
+			if req.GetUserThreadState().GetReadSequence() < 0 {
+				return nil, status.Error(codes.InvalidArgument, "read_sequence must be non-negative")
+			}
+			if req.GetUserThreadState().GetReadSequence() > thread.GetLatestSequence() {
+				return nil, status.Error(codes.InvalidArgument, "read_sequence cannot exceed latest_sequence")
+			}
+			state.ReadSequence = req.GetUserThreadState().GetReadSequence()
+		case "pinned":
+			state.Pinned = req.GetUserThreadState().GetPinned()
+			if !state.GetPinned() {
+				state.PinnedTime = nil
+			} else if state.GetPinnedTime() == nil {
+				state.PinnedTime = now
+			}
+		case "pinned_time":
+			state.PinnedTime = req.GetUserThreadState().GetPinnedTime()
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "unsupported update_mask path %q", path)
+		}
+	}
+	if state.GetPinned() && state.GetPinnedTime() == nil {
+		state.PinnedTime = now
+	}
+	if !state.GetPinned() {
+		state.PinnedTime = nil
+	}
+
+	mutation := spanner.InsertOrUpdate(s.userStatesTbl, []string{"key", "UserThreadState"}, []any{state.GetName(), state})
+	if _, err := s.db.Apply(ctx, []*spanner.Mutation{mutation}); err != nil {
+		return nil, status.Errorf(codes.Internal, "writing user thread state %q: %v", state.GetName(), err)
+	}
+	return state, nil
 }
 
 // ListThreadEvents implements the [ThreadService.ListThreadEvents] method.
@@ -420,8 +578,6 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 				CreateTime:     threadCreateTime,
 				NextSequence:   1,
 				LatestSequence: 0,
-				ReadSequence:   0,
-				HasUnread:      false,
 			}
 			policy = &iampb.Policy{
 				Bindings: []*iampb.Binding{
@@ -442,7 +598,6 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 		req.GetEvent().Sequence = sequence
 		thread.NextSequence = sequence + 1
 		thread.LatestSequence = sequence
-		thread.HasUnread = thread.GetReadSequence() < thread.GetLatestSequence()
 
 		mutations := []*spanner.Mutation{
 			spanner.Insert(s.eventsTbl, []string{"key", "Event"}, []any{req.GetEvent().GetName(), req.GetEvent()}),
@@ -489,20 +644,89 @@ func decodeThreadRow(row *spanner.Row) (*pb.Thread, *iampb.Policy, error) {
 	return thread, policy, nil
 }
 
-// policyHasMemberRole reports whether the given IAM policy binds member to role.
-func policyHasMemberRole(policy *iampb.Policy, member, role string) bool {
-	if policy == nil || member == "" || role == "" {
-		return false
+func (s *ThreadService) readUserThreadStates(ctx context.Context, userResource string, threads []*pb.Thread) (map[string]*pb.UserThreadState, error) {
+	states := map[string]*pb.UserThreadState{}
+	if s.userStatesTbl == "" || userResource == "" || len(threads) == 0 {
+		return states, nil
 	}
-	for _, binding := range policy.GetBindings() {
-		if binding.GetRole() != role {
-			continue
-		}
-		if slices.Contains(binding.GetMembers(), member) {
-			return true
-		}
+
+	keys := make([]string, 0, len(threads))
+	for _, thread := range threads {
+		keys = append(keys, userThreadStateName(thread.GetName(), userResource))
 	}
-	return false
+	statement := spanner.NewStatement(fmt.Sprintf(`SELECT UserThreadState FROM %s WHERE key IN UNNEST(@keys)`, s.userStatesTbl))
+	statement.Params["keys"] = keys
+
+	iterator := s.db.ReadOnlyTransaction().Query(ctx, statement)
+	if err := iterator.Do(func(r *spanner.Row) error {
+		state := &pb.UserThreadState{}
+		if err := r.ColumnByName("UserThreadState", state); err != nil {
+			return err
+		}
+		states[state.GetThread()] = state
+		return nil
+	}); err != nil {
+		return nil, status.Errorf(codes.Internal, "querying user thread states: %v", err)
+	}
+	return states, nil
+}
+
+func (s *ThreadService) readUserThreadState(ctx context.Context, name string) (*pb.UserThreadState, error) {
+	row, err := s.db.Single().ReadRow(ctx, s.userStatesTbl, spanner.Key{name}, []string{"UserThreadState"})
+	if err != nil {
+		if spanner.ErrCode(err) == codes.NotFound {
+			return nil, status.Errorf(codes.NotFound, "user thread state %q not found", name)
+		}
+		return nil, status.Errorf(codes.Internal, "reading user thread state %q: %v", name, err)
+	}
+	state := &pb.UserThreadState{}
+	if err := row.ColumnByName("UserThreadState", state); err != nil {
+		return nil, status.Errorf(codes.Internal, "decoding user thread state %q: %v", name, err)
+	}
+	return state, nil
+}
+
+func parseUserThreadStateName(name string) (threadName string, userID string, err error) {
+	if name == "" {
+		return "", "", status.Error(codes.InvalidArgument, "name is required")
+	}
+	parts := strings.Split(name, "/")
+	if len(parts) != 4 || parts[0] != "threads" || parts[2] != "userStates" || parts[1] == "" || parts[3] == "" {
+		return "", "", status.Errorf(codes.InvalidArgument, "invalid user thread state name %q", name)
+	}
+	return strings.Join(parts[:2], "/"), parts[3], nil
+}
+
+func userThreadStateName(threadName, userResource string) string {
+	return fmt.Sprintf("%s/userStates/%s", threadName, userIDFromResource(userResource))
+}
+
+func userIDFromResource(userResource string) string {
+	return strings.TrimPrefix(userResource, "users/")
+}
+
+func currentUserResource(identity *iam.Identity) string {
+	if identity == nil || identity.IsDeploymentServiceAccount() {
+		return ""
+	}
+	if identity.Id() != "" {
+		return "users/" + identity.Id()
+	}
+	return ""
+}
+
+func requireCurrentUserResource(identity *iam.Identity) (string, error) {
+	userResource := currentUserResource(identity)
+	if userResource == "" {
+		return "", status.Error(codes.Unauthenticated, "an authenticated user is required")
+	}
+	return userResource, nil
+}
+
+func validThreadName(name string) bool {
+	validator := validation.NewValidator()
+	validator.String("name", name).IsPopulated().Matches(threadRegex)
+	return validator.Validate() == nil
 }
 
 // generateThreadDisplayName derives a user-facing thread title from the initial message via Gemini,
