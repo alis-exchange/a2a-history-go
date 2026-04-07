@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -195,7 +196,9 @@ func (s *ThreadService) DeleteThread(ctx context.Context, req *pb.DeleteThreadRe
 	return &emptypb.Empty{}, nil
 }
 
-// ListThreads implements the [ThreadService.ListThreads] method.
+// ListThreads implements the [ThreadService.ListThreads] method and projects caller read state on
+// returned threads. For thread admins, it advances read_sequence to latest_sequence and clears
+// has_unread before returning.
 func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequest) (*pb.ListThreadsResponse, error) {
 	// Authorize
 	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
@@ -208,7 +211,7 @@ func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequ
 	}
 
 	// Prepare query statement
-	statement := spanner.NewStatement(`select Thread from ` + s.historyTbl + " as t")
+	statement := spanner.NewStatement(`select Thread, Policy from ` + s.historyTbl + " as t")
 	if !az.Identity.IsDeploymentServiceAccount() {
 		statement.SQL += `
 			WHERE EXISTS (
@@ -237,27 +240,52 @@ func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequ
 	statement.Params["offset"] = offset
 
 	// make db hit and build up results
-	var resources []*pb.Thread
+	var (
+		threads          []*pb.Thread
+		ownerThreadNames = map[string]struct{}{}
+	)
 	iterator := s.db.ReadOnlyTransaction().Query(ctx, statement)
 	if err := iterator.Do(func(r *spanner.Row) error {
-		history := &pb.Thread{}
-		if err := r.Columns(history); err != nil {
+		thread, policy, err := decodeThreadRow(r)
+		if err != nil {
 			return err
 		}
-		resources = append(resources, history)
+		if !az.Identity.IsDeploymentServiceAccount() && policyHasMemberRole(policy, az.Identity.PolicyMember(), roleThreadAdmin) {
+			thread.ReadSequence = thread.GetLatestSequence()
+			thread.HasUnread = false
+			ownerThreadNames[thread.GetName()] = struct{}{}
+		} else {
+			thread.HasUnread = thread.GetReadSequence() < thread.GetLatestSequence()
+		}
+		threads = append(threads, thread)
 		return nil
 	}); err != nil {
 		return nil, status.Errorf(codes.Internal, "querying database: %v", err)
 	}
 
+	if len(ownerThreadNames) > 0 {
+		mutations := make([]*spanner.Mutation, 0, len(ownerThreadNames))
+		for _, history := range threads {
+			if _, ok := ownerThreadNames[history.GetName()]; !ok {
+				continue
+			}
+			mutations = append(mutations, spanner.Update(s.historyTbl, []string{"key", "Thread"}, []any{history.GetName(), history}))
+		}
+		if len(mutations) > 0 {
+			if _, err := s.db.Apply(ctx, mutations); err != nil {
+				return nil, status.Errorf(codes.Internal, "updating thread read state: %v", err)
+			}
+		}
+	}
+
 	// determine next page token
 	nextPageToken := ""
-	if len(resources) == limit {
+	if len(threads) == limit {
 		nextPageToken = fmt.Sprintf("%d", offset+limit)
 	}
 
 	return &pb.ListThreadsResponse{
-		Threads:       resources,
+		Threads:       threads,
 		NextPageToken: nextPageToken,
 	}, nil
 }
@@ -328,7 +356,9 @@ func (s *ThreadService) ListThreadEvents(ctx context.Context, req *pb.ListThread
 	}, nil
 }
 
-// AppendThreadEvent implements the [ThreadService.AppendThreadEvent] method.
+// AppendThreadEvent implements the [ThreadService.AppendThreadEvent] method. It assigns a unique
+// monotonic event sequence within the thread and updates the thread's sequence counters in the same
+// transaction as the event insert.
 func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThreadEventRequest) (*pb.AppendThreadEventResponse, error) {
 	// Validation
 	validator := validation.NewValidator()
@@ -358,7 +388,7 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 		ctxID = req.GetEvent().GetTask().GetContextId()
 	}
 	if ctxID == "" {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, "event payload must include a context_id")
 	}
 
 	historyName := fmt.Sprintf("threads/%s", ctxID)
@@ -367,40 +397,63 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 	if req.GetEvent().GetCreateTime() == nil {
 		req.GetEvent().CreateTime = timestamppb.Now()
 	}
+	now := time.Now().UTC()
+	threadCreateTime := timestamppb.New(now)
+	threadDisplayName := s.generateThreadDisplayName(ctx, req.GetEvent(), now)
 
-	// insert Thread resource if missing
-	var mutations []*spanner.Mutation
-	if _, _, err := s.readThread(ctx, historyName); err != nil {
-		if status.Code(err) != codes.NotFound {
-			return nil, err
-		}
-		now := time.Now().UTC()
-		history := &pb.Thread{
-			Name:        historyName,
-			DisplayName: s.generateThreadDisplayName(ctx, req.GetEvent(), now),
-			AgentId:     req.GetAgentId(),
-			CreateTime:  timestamppb.Now(),
-		}
-		policy := &iampb.Policy{
-			Bindings: []*iampb.Binding{
-				{
-					Role:    roleThreadAdmin,
-					Members: []string{az.Identity.PolicyMember()},
-				},
-			},
-		}
-		mutation := spanner.Insert(s.historyTbl, []string{"key", "Thread", "Policy"}, []any{history.GetName(), history, policy})
-		mutations = append(mutations, mutation)
-
-	}
-
-	mutation := spanner.Insert(s.eventsTbl, []string{"key", "Event"}, []any{req.GetEvent().GetName(), req.GetEvent()})
-	mutations = append(mutations, mutation)
-
-	// Apply mutations in a single transaction
+	// Apply thread read/write state and event insert in a single transaction.
 	if _, err := s.db.ReadWriteTransaction(ctx, func(ctx context.Context, rwt *spanner.ReadWriteTransaction) error {
+		thread := &pb.Thread{}
+		policy := &iampb.Policy{}
+		threadExists := true
+
+		row, err := rwt.ReadRow(ctx, s.historyTbl, spanner.Key{historyName}, []string{"Thread", "Policy"})
+		if err != nil {
+			if spanner.ErrCode(err) != codes.NotFound {
+				return status.Errorf(codes.Internal, "reading thread %q: %v", historyName, err)
+			}
+			threadExists = false
+			thread = &pb.Thread{
+				Name:           historyName,
+				DisplayName:    threadDisplayName,
+				AgentId:        req.GetAgentId(),
+				CreateTime:     threadCreateTime,
+				NextSequence:   1,
+				LatestSequence: 0,
+				ReadSequence:   0,
+				HasUnread:      false,
+			}
+			policy = &iampb.Policy{
+				Bindings: []*iampb.Binding{
+					{
+						Role:    roleThreadAdmin,
+						Members: []string{az.Identity.PolicyMember()},
+					},
+				},
+			}
+		} else if err := row.Columns(thread, policy); err != nil {
+			return status.Errorf(codes.Internal, "decoding thread %q: %v", historyName, err)
+		}
+
+		sequence := thread.GetNextSequence()
+		if sequence < 1 {
+			sequence = max(thread.GetLatestSequence()+1, 1)
+		}
+		req.GetEvent().Sequence = sequence
+		thread.NextSequence = sequence + 1
+		thread.LatestSequence = sequence
+		thread.HasUnread = thread.GetReadSequence() < thread.GetLatestSequence()
+
+		mutations := []*spanner.Mutation{
+			spanner.Insert(s.eventsTbl, []string{"key", "Event"}, []any{req.GetEvent().GetName(), req.GetEvent()}),
+		}
+		if threadExists {
+			mutations = append(mutations, spanner.Update(s.historyTbl, []string{"key", "Thread"}, []any{thread.GetName(), thread}))
+		} else {
+			mutations = append(mutations, spanner.Insert(s.historyTbl, []string{"key", "Thread", "Policy"}, []any{thread.GetName(), thread, policy}))
+		}
 		if err := rwt.BufferWrite(mutations); err != nil {
-			return err
+			return status.Errorf(codes.Internal, "writing thread/event mutations: %v", err)
 		}
 		return nil
 	}); err != nil {
@@ -419,13 +472,37 @@ func (s *ThreadService) readThread(ctx context.Context, name string) (*pb.Thread
 		}
 		return nil, nil, status.Errorf(codes.Internal, "reading thread %q: %v", name, err)
 	}
-	history := &pb.Thread{}
-	policy := &iampb.Policy{}
-
-	if err := row.Columns(history, policy); err != nil {
+	thread, policy, err := decodeThreadRow(row)
+	if err != nil {
 		return nil, nil, status.Errorf(codes.Internal, "decoding thread %q: %v", name, err)
 	}
-	return history, policy, nil
+	return thread, policy, nil
+}
+
+// decodeThreadRow decodes a threads-table row containing Thread and Policy proto columns.
+func decodeThreadRow(row *spanner.Row) (*pb.Thread, *iampb.Policy, error) {
+	thread := &pb.Thread{}
+	policy := &iampb.Policy{}
+	if err := row.Columns(thread, policy); err != nil {
+		return nil, nil, err
+	}
+	return thread, policy, nil
+}
+
+// policyHasMemberRole reports whether the given IAM policy binds member to role.
+func policyHasMemberRole(policy *iampb.Policy, member, role string) bool {
+	if policy == nil || member == "" || role == "" {
+		return false
+	}
+	for _, binding := range policy.GetBindings() {
+		if binding.GetRole() != role {
+			continue
+		}
+		if slices.Contains(binding.GetMembers(), member) {
+			return true
+		}
+	}
+	return false
 }
 
 // generateThreadDisplayName derives a user-facing thread title from the initial message via Gemini,

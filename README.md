@@ -46,7 +46,8 @@ flowchart LR
 ```
 
 1. **Interceptor path:** On each RPC, `Before` activates the history extension when the client requested it, converts `SendMessage` payloads to `ThreadEvent`s, and either appends immediately or defers until `After` has a `ContextID` from the response. `After` appends response-shaped events (task, message, status, artifact updates) and may append twice when a deferred user message is flushed first.
-2. **JSON-RPC path:** Browsers or tools call `GetThread`, `ListThreads`, `ListThreadEvents` over JSON-RPC 2.0 POST; the same `ThreadService` backs reads. Params and `result` use **protojson** (camelCase JSON; unknown fields are ignored on decode). Errors returned by the service as **gRPC statuses** are mapped to JSON-RPC error codes (for example `InvalidArgument` → invalid params, `NotFound` → not found). For cross-origin browsers, register the handler with `jsonrpc.WithCORS()` (or tailored `CORSAllow*` options).
+2. **Storage semantics:** `AppendThreadEvent` assigns every event a unique monotonic `sequence` within its thread and updates thread state atomically (`next_sequence`, `latest_sequence`). `ListThreads` projects reader state for the caller; when the caller is the thread-owning admin, the service advances `read_sequence` to `latest_sequence` and clears `has_unread`.
+3. **JSON-RPC path:** Browsers or tools call `GetThread`, `ListThreads`, `ListThreadEvents` over JSON-RPC 2.0 POST; the same `ThreadService` backs reads. Params and `result` use **protojson** (camelCase JSON; unknown fields are ignored on decode). Errors returned by the service as **gRPC statuses** are mapped to JSON-RPC error codes (for example `InvalidArgument` → invalid params, `NotFound` → not found). For cross-origin browsers, register the handler with `jsonrpc.WithCORS()` (or tailored `CORSAllow*` options).
 
 ## Installation
 
@@ -236,4 +237,6 @@ mux.Handle(jsonrpc.HistoryExtensionPath, jsonrpc.NewJSONRPCHandler(historyServic
 ## Documentation
 
 - See [`service/docs.go`](service/docs.go), [`a2asrv/docs.go`](a2asrv/docs.go), and [`jsonrpc/docs.go`](jsonrpc/docs.go) for method-level flows, IAM roles, and transport semantics.
+- Reader view fields are part of the persisted `Thread` proto. `latest_sequence` is shared thread state; `read_sequence` and `has_unread` are maintained by the service for the owning admin caller during `ListThreads`.
+- `ThreadEvent.sequence` is a stable per-thread cursor assigned by the service during `AppendThreadEvent`.
 - Proto definitions: `alis/a2a/extension/history/v1` in this module.

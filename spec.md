@@ -52,14 +52,25 @@ A lightweight collection representing a unique interaction context. This is tigh
 ```proto
 // Represents a collection of events tied to a specific context.
 message Thread {
-    // The unique identifier for this thread collection.
-    string context_id = 1;
+    // The resource name of the Thread.
+    // threads/{context_id}
+    string name = 1;
+    // Generated display name from the first event in a Thread.
+    string display_name = 2;
     // The ID of the agent to which this collection belongs.
-    string agent_id = 2;
+    string agent_id = 3;
+    // The agent display name, if available.
+    string agent_display_name = 4;
+    // Internal monotonic counter used to assign event sequence numbers.
+    int64 next_sequence = 5;
+    // Highest event sequence currently present in the thread.
+    int64 latest_sequence = 6;
+    // Caller-facing read cursor for the thread.
+    int64 read_sequence = 7;
+    // True when the caller has unread events in this thread.
+    bool has_unread = 8;
     // Timestamp when the collection was initiated.
-    google.protobuf.Timestamp create_time = 3;
-    // Summary or title of the collection (optional).
-    string display_name = 4;
+    google.protobuf.Timestamp create_time = 98;
 }
 
 ```
@@ -83,12 +94,19 @@ message ThreadEvent {
         // An event indicating a task artifact update object.
         TaskArtifactUpdateEvent artifact_update = 5;
     }
+    // Monotonic sequence number within a thread.
+    int64 sequence = 6;
 
     // When this event was created.
     google.protobuf.Timestamp create_time = 98;
 }
 
 ```
+
+`latest_sequence` is shared thread state maintained by the service as events are appended. `read_sequence`
+and `has_unread` are reader-view fields exposed by read APIs; in the built-in service implementation,
+the owning admin caller is marked read on `ListThreads` by advancing `read_sequence` to
+`latest_sequence`.
 
 Note: The resource model naming convention used by this extension delibrately avoids the use of the term 'session'. This is to prevent confusion with the concept of a 'session' typically used to describe and model an agent's own internal event persistence and management (e.g. Vertex AI Agent Engine sessions). These are normally stored independantly of the A2A consumption layer and serve a different purpose.
 
@@ -98,7 +116,7 @@ The extension introduces a set of custom RPC methods. Agents that support the ex
 
 #### `ListThreads`
 
-This method allows the client to retrieve a paginated list of available interaction histories. Clients would typically use this method to discover the set of available Threads made available by the agent. 
+This method allows the client to retrieve a paginated list of available interaction histories. Clients would typically use this method to discover the set of available Threads made available by the agent. Built-in service implementations may also use this call to advance caller read cursors and compute unread state.
 
 ```proto
 message ListThreadsRequest {
