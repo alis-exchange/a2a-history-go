@@ -8,7 +8,7 @@ require (
 	github.com/a2aproject/a2a-go/v2 v2.0.1
 	github.com/google/uuid v1.6.0
 	go.alis.build/alog v0.0.19
-	go.alis.build/common v1.0.22
+	go.alis.build/common v1.1.2
 	go.alis.build/iam/v2 v2.4.0
 	go.alis.build/validation v1.0.7
 	google.golang.org/genai v1.42.0

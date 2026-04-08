@@ -1,6 +1,10 @@
 // Package jsonrpc exposes the history API over HTTP as JSON-RPC 2.0, backed by the built-in
 // history [service.ThreadService].
 //
+// In the ge/agent/v2/infra layout, this handler normally runs inside the Cloud Run agent service
+// defined in infra/cloudrun.tf, while the required storage tables come from
+// infra/modules/alis.a2a.extension.history.v1.
+//
 // [NewJSONRPCHandler] handles GetThread, ListThreads, and ListThreadEvents over HTTP POST.
 // Optional [WithCORS] enables browser cross-origin access. Params and results use protojson
 // (camelCase JSON on the wire; unknown fields discarded on input; unpopulated fields emitted on output).

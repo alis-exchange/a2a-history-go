@@ -11,6 +11,7 @@ This project contains a lightweight Go library for developers supporting the [a2
 - **Integration with the official [A2A Go SDK](https://github.com/a2aproject/a2a-go/tree/main):** Builds on top of the official library for building A2A-compliant agents in Go.
 - **Built-in persistence:** Includes a Google Cloud Spanner-backed [`service.ThreadService`](service/thread.go).
 - **Two integration points:** An [`a2asrv`](a2asrv/) call interceptor (records traffic as your agent runs) and an optional [`jsonrpc`](jsonrpc/) HTTP handler for querying history from clients.
+- **Infra module alignment:** The built-in storage model matches the Terraform module consumed from `alis/build/ge/agent/v2/infra/modules/alis.a2a.extension.history.v1`.
 
 ## Packages
 
@@ -21,6 +22,27 @@ This project contains a lightweight Go library for developers supporting the [a2
 | [`go.alis.build/a2a/extension/history/jsonrpc`](jsonrpc/) | [`NewJSONRPCHandler`](jsonrpc/jsonrpc.go) with options such as [`WithCORS`](jsonrpc/cors.go), plus JSON-RPC error mapping ([`errors.go`](jsonrpc/errors.go)).                                                                                                                               |
 
 Package-level documentation (design, IAM roles, interceptor flow) lives in [`service/docs.go`](service/docs.go), [`a2asrv/docs.go`](a2asrv/docs.go), and [`jsonrpc/docs.go`](jsonrpc/docs.go). Run `go doc -all ./...` locally for the full commentary.
+
+## Infra Layout
+
+The history extension is intended to plug into the agent infra layout under `alis/build/ge/agent/v2/infra`:
+
+```text
+alis/build/ge/agent/v2/infra/
+├── main.tf
+├── cloudrun.tf
+├── spanner.tf
+└── modules/
+    ├── alis.adk.sessions.v1/
+    ├── alis.a2a.extension.history.v1/
+    │   └── main.tf
+    └── alis.a2a.extension.scheduler.v1/
+```
+
+- `infra/main.tf` wires the history module alongside the sessions and scheduler modules.
+- `infra/modules/alis.a2a.extension.history.v1/main.tf` creates the `Threads`, `ThreadEvents`, and `UserThreadStates` Spanner tables plus the foreign keys expected by [`service.ThreadService`](service/thread.go).
+- The module derives table names as `${replace(var.ALIS_OS_PROJECT, "-", "_")}_${replace(var.neuron, "-", "_")}_Threads`, `_ThreadEvents`, and `_UserThreadStates`.
+- `infra/cloudrun.tf` passes the managed Spanner project, instance, and database into the agent container through `ALIS_MANAGED_SPANNER_*` environment variables.
 
 ## Architecture (high level)
 
@@ -59,22 +81,33 @@ go get -u go.alis.build/a2a/extension/history
 
 ### History service
 
-Use the built-in Spanner-backed `ThreadService`:
+Use the built-in Spanner-backed `ThreadService`. In the `ge/agent/v2/infra` layout, the Cloud Run agent container receives the backing Spanner coordinates from `infra/cloudrun.tf` via `ALIS_MANAGED_SPANNER_PROJECT`, `ALIS_MANAGED_SPANNER_INSTANCE`, and `ALIS_MANAGED_SPANNER_DB`.
 
 ```go
 import (
+	"fmt"
+	"os"
+
 	"go.alis.build/a2a/extension/history/service"
 )
 
+project := os.Getenv("ALIS_MANAGED_SPANNER_PROJECT")
+instance := os.Getenv("ALIS_MANAGED_SPANNER_INSTANCE")
+database := os.Getenv("ALIS_MANAGED_SPANNER_DB")
+prefix := fmt.Sprintf("%s_%s", "my_os_project", "my_neuron")
+
 historyService, err := service.NewThreadService(ctx, &service.SpannerStoreConfig{
-	Project:               "SPANNER_PROJECT_NAME",
-	Instance:              "SPANNER_INSTANCE_NAME",
-	Database:              "SPANNER_DATABASE_NAME",
-	ThreadsTable:          "THREADS_TABLE_NAME",
-	EventsTable:           "EVENTS_TABLE_NAME",
-	UserThreadStatesTable: "USER_THREAD_STATES_TABLE_NAME",
+	Project:               project,
+	Instance:              instance,
+	Database:              database,
+	ThreadsTable:          prefix + "_Threads",
+	EventsTable:           prefix + "_ThreadEvents",
+	UserThreadStatesTable: prefix + "_UserThreadStates",
 })
 ```
+
+In the managed infra layout, `prefix` must match the Terraform module naming rule:
+`${replace(var.ALIS_OS_PROJECT, "-", "_")}_${replace(var.neuron, "-", "_")}`.
 
 Register it on your gRPC server without importing the generated history proto package:
 
@@ -83,156 +116,30 @@ grpcServer := grpc.NewServer()
 historyService.Register(grpcServer)
 ```
 
-Below is Terraform aligned with `ThreadService` expectations (proto columns, foreign key).
+If you are deploying through `alis/build/ge/agent/v2/infra`, register the history schema from `infra/main.tf` by including the module:
 
 ```hcl
-resource "alis_google_spanner_table" "a2a_thread" {
-  project         = "SPANNER_PROJECT_NAME"
-  instance        = "SPANNER_INSTANCE_NAME"
-  database        = "SPANNER_DATABASE_NAME"
-  name            = "THREADS_TABLE_NAME"
-  schema = {
-    columns = [
-      {
-        name           = "key",
-        type           = "STRING",
-        is_primary_key = true,
-        required       = true
-      },
-      {
-        name          = "Thread",
-        type          = "PROTO"
-        proto_package = "alis.a2a.extension.history.v1.Thread"
-        required      = true
-      },
-      {
-        name          = "Policy",
-        type          = "PROTO"
-        proto_package = "google.iam.v1.Policy"
-        required      = true
-      },
-      {
-        name            = "create_time",
-        type            = "TIMESTAMP",
-        required        = false,
-        is_computed     = true,
-        computation_ddl = "TIMESTAMP_ADD(TIMESTAMP_SECONDS(Thread.create_time.seconds),INTERVAL CAST(FLOOR(Thread.create_time.nanos / 1000) AS INT64) MICROSECOND)",
-        is_stored       = true
-      },
-    ]
-  }
-}
+module "alis_a2a_extension_history_v1" {
+  source = "./modules/alis.a2a.extension.history.v1"
 
-resource "alis_google_spanner_table" "a2a_thread_events" {
-  project         = "SPANNER_PROJECT_NAME"
-  instance        = "SPANNER_INSTANCE_NAME"
-  database        = "SPANNER_DATABASE_NAME"
-  name            = "EVENTS_TABLE_NAME"
-  schema = {
-    columns = [
-      {
-        name           = "key",
-        type           = "STRING",
-        is_primary_key = true,
-        required       = true
-      },
-      {
-        name          = "Event",
-        type          = "PROTO"
-        proto_package = "alis.a2a.extension.history.v1.ThreadEvent"
-        required      = true
-      },
-      {
-        name           = "thread",
-        type           = "STRING",
-        required       = false
-        is_stored      = true
-        is_computed    = true
-        computation_ddl = "REGEXP_EXTRACT(Event.name, r'^(threads/[^/]+)')",
-      },
-      {
-        name            = "create_time",
-        type            = "TIMESTAMP",
-        required        = false,
-        is_computed     = true,
-        computation_ddl = "TIMESTAMP_ADD(TIMESTAMP_SECONDS(Event.create_time.seconds),INTERVAL CAST(FLOOR(Event.create_time.nanos / 1000) AS INT64) MICROSECOND)",
-        is_stored       = true
-      },
-    ]
-  }
-}
+  alis_os_project               = var.ALIS_OS_PROJECT
+  alis_managed_spanner_project  = var.ALIS_MANAGED_SPANNER_PROJECT
+  alis_managed_spanner_instance = var.ALIS_MANAGED_SPANNER_INSTANCE
+  alis_managed_spanner_db       = var.ALIS_MANAGED_SPANNER_DB
+  neuron                        = local.neuron
 
-resource "alis_google_spanner_table" "a2a_user_thread_states" {
-  project         = "SPANNER_PROJECT_NAME"
-  instance        = "SPANNER_INSTANCE_NAME"
-  database        = "SPANNER_DATABASE_NAME"
-  name            = "USER_THREAD_STATES_TABLE_NAME"
-  schema = {
-    columns = [
-      {
-        name           = "key",
-        type           = "STRING",
-        is_primary_key = true,
-        required       = true
-      },
-      {
-        name          = "UserThreadState",
-        type          = "PROTO"
-        proto_package = "alis.a2a.extension.history.v1.UserThreadState"
-        required      = true
-      },
-      {
-        name            = "thread",
-        type            = "STRING",
-        required        = false
-        is_stored       = true
-        is_computed     = true
-        computation_ddl = "REGEXP_EXTRACT(UserThreadState.name, r'^(threads/[^/]+)')"
-      },
-      {
-        name            = "user",
-        type            = "STRING",
-        required        = false
-        is_stored       = true
-        is_computed     = true
-        computation_ddl = "UserThreadState.user"
-      },
-      {
-        name            = "update_time",
-        type            = "TIMESTAMP",
-        required        = false,
-        is_computed     = true,
-        computation_ddl = "TIMESTAMP_ADD(TIMESTAMP_SECONDS(UserThreadState.update_time.seconds),INTERVAL CAST(FLOOR(UserThreadState.update_time.nanos / 1000) AS INT64) MICROSECOND)",
-        is_stored       = true
-      },
-    ]
-  }
-}
-
-resource "alis_google_spanner_table_foreign_key" "a2a_thread_events_fk" {
-  project           = "SPANNER_PROJECT_NAME"
-  instance          = "SPANNER_INSTANCE_NAME"
-  database          = "SPANNER_DATABASE_NAME"
-  name              = "EVENT_FOREIGN_KEY_NAME"
-  table             = "EVENTS_TABLE_NAME"
-  column            = "thread"
-  referenced_table  = alis_google_spanner_table.a2a_thread.name
-  referenced_column = "key"
-  on_delete         = "CASCADE"
-}
-
-resource "alis_google_spanner_table_foreign_key" "a2a_user_thread_states_fk" {
-  project           = "SPANNER_PROJECT_NAME"
-  instance          = "SPANNER_INSTANCE_NAME"
-  database          = "SPANNER_DATABASE_NAME"
-  name              = "USER_THREAD_STATE_FOREIGN_KEY_NAME"
-  table             = "USER_THREAD_STATES_TABLE_NAME"
-  column            = "thread"
-  referenced_table  = alis_google_spanner_table.a2a_thread.name
-  referenced_column = "key"
-  on_delete         = "CASCADE"
+  depends_on = [google_project_service.environment]
 }
 ```
+
+That module currently owns the full history schema:
+
+- `Threads`: `Thread` proto payload, IAM `Policy`, computed `create_time`
+- `ThreadEvents`: `ThreadEvent` proto payload, computed `thread`, computed `create_time`
+- `UserThreadStates`: `UserThreadState` proto payload, computed `thread`, computed `user`, computed `update_time`
+- Foreign keys from `ThreadEvents.thread` and `UserThreadStates.thread` back to `Threads.key`
+
+If you are not using the `ge/agent/v2/infra` layout, your custom Terraform must still reproduce the same columns and foreign keys because [`service.ThreadService`](service/thread.go) assumes that schema.
 
 ### Registering the call interceptor
 
@@ -297,6 +204,7 @@ mux.Handle(jsonrpc.HistoryExtensionPath, jsonrpc.NewJSONRPCHandler(historyServic
 ## Documentation
 
 - See [`service/docs.go`](service/docs.go), [`a2asrv/docs.go`](a2asrv/docs.go), and [`jsonrpc/docs.go`](jsonrpc/docs.go) for method-level flows, IAM roles, and transport semantics.
+- Infra consumers should treat `alis/build/ge/agent/v2/infra/main.tf` as the integration point and `alis/build/ge/agent/v2/infra/modules/alis.a2a.extension.history.v1/main.tf` as the source of truth for the storage layout.
 - Reader/pin state lives in per-user `UserThreadState` rows. `ListThreads` returns `ThreadView` objects that derive `has_unread` from `Thread.latest_sequence` and the caller's `UserThreadState.read_sequence`.
 - `ThreadEvent.sequence` is a stable per-thread cursor assigned by the service during `AppendThreadEvent`.
 - Proto definitions: `alis/a2a/extension/history/v1` in this module.

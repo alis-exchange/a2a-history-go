@@ -1,6 +1,11 @@
 // Package service provides [ThreadService], the built-in Google Cloud Spanner implementation for
 // persisting and querying A2A thread history (threads and thread events).
 //
+// In the ge/agent/v2/infra deployment layout, the backing Spanner tables are provisioned by the
+// Terraform module at alis/build/ge/agent/v2/infra/modules/alis.a2a.extension.history.v1. That
+// module creates the Threads, ThreadEvents, and UserThreadStates tables with names derived from
+// ALIS_OS_PROJECT and the neuron identifier, matching the schema expected by [ThreadService].
+//
 // # ThreadService
 //
 // [NewThreadService] opens a Spanner client and configures an IAM authorizer with three roles:

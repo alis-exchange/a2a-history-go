@@ -1,5 +1,9 @@
 // Package a2asrv bridges the A2A Go server runtime to the built-in history [service.ThreadService].
 //
+// This package is typically wired into the agent container where infra/cloudrun.tf injects the 
+// managed Spanner coordinates used by the historyvservice and infra/main.tf enables the matching 
+// history storage module.
+//
 // [NewInterceptor] implements github.com/a2aproject/a2a-go/v2/a2asrv.CallInterceptor, activating
 // the a2a-history extension URI and appending ThreadEvent records (see alis.a2a.extension.history.v1)
 // for inbound SendMessage traffic and outbound Task / Message / status / artifact responses.
