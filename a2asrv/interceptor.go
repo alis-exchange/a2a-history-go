@@ -3,6 +3,7 @@ package a2asrv
 import (
 	"context"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -69,8 +70,16 @@ func NewInterceptor(service pb.ThreadServiceServer, opts ...InterceptorOption) *
 // SendMessage requests either appends immediately (when context id is present) or caches the event
 // and stores an invocation id on the returned context when context id is empty.
 func (i *interceptor) Before(ctx context.Context, callCtx *sdka2asrv.CallContext, req *sdka2asrv.Request) (context.Context, any, error) {
+	// Some transports may use a comma-separated string of URIs, so we need to split them and trim whitespace.
+	var requestedURIs []string
+	for _, uri := range callCtx.Extensions().RequestedURIs() {
+		for part := range strings.SplitSeq(uri, ",") {
+			requestedURIs = append(requestedURIs, strings.TrimSpace(part))
+		}
+	}
+
 	// Check incoming request for extension activation
-	if !slices.Contains(callCtx.Extensions().RequestedURIs(), AgentExtension.URI) {
+	if !slices.Contains(requestedURIs, AgentExtension.URI) {
 		return ctx, nil, nil
 	}
 
