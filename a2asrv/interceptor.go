@@ -25,6 +25,9 @@ var invocationKey = invocationKeyType{}
 
 var _ sdka2asrv.CallInterceptor = (*interceptor)(nil)
 
+// Interceptor records A2A request/response history via a ThreadServiceServer.
+type Interceptor = interceptor
+
 type interceptor struct {
 	service pb.ThreadServiceServer
 	agentID string

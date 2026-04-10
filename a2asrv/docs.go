@@ -7,6 +7,8 @@
 // [NewInterceptor] implements github.com/a2aproject/a2a-go/v2/a2asrv.CallInterceptor, activating
 // the a2a-history extension URI and appending ThreadEvent records (see alis.a2a.extension.history.v1)
 // for inbound SendMessage traffic and outbound Task / Message / status / artifact responses.
+// Callers that hold a concrete history service instance can also construct it via that service's
+// NewInterceptor method.
 //
 // # Call interceptor — request path (Before)
 //

@@ -109,13 +109,11 @@ historyService, err := service.NewThreadService(ctx, &service.SpannerStoreConfig
 In the managed infra layout, `prefix` must match the Terraform module naming rule:
 `${replace(var.ALIS_OS_PROJECT, "-", "_")}_${replace(var.neuron, "-", "_")}`.
 
-Register it on your gRPC server from the root package:
+Register it on your gRPC server directly from the service instance:
 
 ```go
-import a2ahistory "go.alis.build/a2a/extension/history"
-
 grpcServer := grpc.NewServer()
-a2ahistory.RegisterGRPC(grpcServer, historyService)
+historyService.RegisterGRPC(grpcServer)
 ```
 
 If you are deploying through `alis/build/ge/agent/v2/infra`, register the history schema from `infra/main.tf` by including the module:
@@ -156,7 +154,7 @@ import (
 requestHandler := sdka2asrv.NewHandler(
 	&agentExecutor{},
 	// ... other options ...
-	sdka2asrv.WithCallInterceptor(historya2asrv.NewInterceptor(historyService, historya2asrv.WithAgentID("my-agent-id"))),
+	sdka2asrv.WithCallInterceptor(historyService.NewInterceptor(historya2asrv.WithAgentID("my-agent-id"))),
 )
 ```
 
@@ -167,20 +165,17 @@ Expose history reads over HTTP with the root package helper or, for custom route
 If you use a method-aware mux such as Go 1.22+ `http.ServeMux`, the root package can mount the standard history endpoint for you:
 
 ```go
-import a2ahistory "go.alis.build/a2a/extension/history"
-
-a2ahistory.RegisterHTTP(mux, historyService)
+historyService.RegisterHTTP(mux)
 ```
 
 Browser clients crossing origins need CORS on the JSON-RPC responses and an OPTIONS preflight. Forward JSON-RPC options through the root helper:
 
 ```go
 import (
-	a2ahistory "go.alis.build/a2a/extension/history"
 	historyjsonrpc "go.alis.build/a2a/extension/history/jsonrpc"
 )
 
-a2ahistory.RegisterHTTP(mux, historyService, a2ahistory.WithJSONRPCOptions(historyjsonrpc.WithCORS()))
+historyService.RegisterHTTP(mux, historyjsonrpc.WithCORS())
 ```
 
 For routers that do not support Go 1.22 method-aware patterns, mount [`jsonrpc.NewJSONRPCHandler`](jsonrpc/jsonrpc.go) directly at [`jsonrpc.HistoryExtensionPath`](jsonrpc/jsonrpc.go) or any path your gateway uses:
