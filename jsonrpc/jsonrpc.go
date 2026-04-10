@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"go.alis.build/a2a/extension/history/service"
 	"go.alis.build/alog"
 	pb "go.alis.build/common/alis/a2a/extension/history/v1"
 	"google.golang.org/grpc"
@@ -60,7 +59,7 @@ type jsonrpcResponse struct {
 }
 
 type jsonrpcHandler struct {
-	service service.ThreadService
+	service pb.ThreadServiceServer
 	cors    *corsConfig
 }
 
@@ -136,7 +135,7 @@ func (h *jsonrpcHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	h.handleRequest(ctx, rw, &payload)
 }
 
-// handleRequest unmarshals params with [jsonrpcUnmarshaler], calls [service.ThreadService], then either
+// handleRequest unmarshals params with [jsonrpcUnmarshaler], calls [pb.ThreadServiceServer], then either
 // marshals the protobuf result with [jsonrpcMarshaler] into the JSON-RPC result field or writes
 // an error via [jsonrpcHandler.writeJSONRPCError].
 func (h *jsonrpcHandler) handleRequest(ctx context.Context, rw http.ResponseWriter, req *jsonrpcRequest) {
@@ -220,7 +219,7 @@ func (h *jsonrpcHandler) writeJSONRPCError(ctx context.Context, rw http.Response
 	}
 }
 
-// grpcToJSONRPCError maps google.golang.org/grpc/status codes from the history [service.ThreadService]
+// grpcToJSONRPCError maps google.golang.org/grpc/status codes from the history [pb.ThreadServiceServer]
 // (for example NotFound, InvalidArgument) to [JSONRPCError] values, using -326xx standard codes
 // where they apply and -320xx implementation-defined codes for auth, permission, and not-found.
 func (h *jsonrpcHandler) grpcToJSONRPCError(st *status.Status) JSONRPCError {
@@ -241,12 +240,12 @@ func (h *jsonrpcHandler) grpcToJSONRPCError(st *status.Status) JSONRPCError {
 }
 
 // NewJSONRPCHandler returns an [http.Handler] that implements JSON-RPC 2.0 for the history API
-// (ListThreads, GetThread, ListThreadEvents). The service must implement [service.ThreadService].
+// (ListThreads, GetThread, ListThreadEvents). The service must implement [pb.ThreadServiceServer].
 // Request params and response results are protobuf JSON (protojson): camelCase keys, unknown fields
 // ignored on input, unpopulated fields included on output. gRPC status errors from the service are
 // mapped to JSON-RPC errors. Pass [WithCORS] (and [CORSAllowOrigin] / [CORSAllowHeaders] / [CORSAllowMethods])
 // for browser clients.
-func NewJSONRPCHandler(service service.ThreadService, opts ...JSONRPCHandlerOption) http.Handler {
+func NewJSONRPCHandler(service pb.ThreadServiceServer, opts ...JSONRPCHandlerOption) http.Handler {
 	h := &jsonrpcHandler{service: service}
 	for _, o := range opts {
 		o(h)

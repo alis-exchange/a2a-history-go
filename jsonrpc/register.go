@@ -3,7 +3,7 @@ package jsonrpc
 import (
 	"net/http"
 
-	"go.alis.build/a2a/extension/history/service"
+	pb "go.alis.build/common/alis/a2a/extension/history/v1"
 )
 
 var registeredMethods = [...]string{
@@ -22,7 +22,7 @@ type HTTPRegistrar interface {
 // Register mounts the history JSON-RPC handler at [HistoryExtensionPath] for POST requests
 // and OPTIONS preflight requests on method-aware muxes. For routers without method-pattern support,
 // create the handler directly via [NewJSONRPCHandler] and mount it according to that router's API.
-func Register(mux HTTPRegistrar, service service.ThreadService, opts ...JSONRPCHandlerOption) {
+func Register(mux HTTPRegistrar, service pb.ThreadServiceServer, opts ...JSONRPCHandlerOption) {
 	handler := NewJSONRPCHandler(service, opts...)
 	for _, method := range registeredMethods {
 		mux.Handle(method+" "+HistoryExtensionPath, handler)

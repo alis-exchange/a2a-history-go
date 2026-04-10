@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"go.alis.build/a2a/extension/history/jsonrpc"
-	"go.alis.build/a2a/extension/history/service"
+	pb "go.alis.build/common/alis/a2a/extension/history/v1"
 	"google.golang.org/grpc"
 )
 
@@ -34,8 +34,8 @@ func WithJSONRPCOptions(opts ...jsonrpc.JSONRPCHandlerOption) HTTPOption {
 }
 
 // RegisterGRPC wires the history service into a gRPC server or any other ServiceRegistrar.
-func RegisterGRPC(registrar grpc.ServiceRegistrar, svc service.ThreadService) {
-	svc.Register(registrar)
+func RegisterGRPC(registrar grpc.ServiceRegistrar, svc pb.ThreadServiceServer) {
+	pb.RegisterThreadServiceServer(registrar, svc)
 }
 
 // RegisterHTTP mounts the history JSON-RPC API on a method-aware mux.
@@ -43,7 +43,7 @@ func RegisterGRPC(registrar grpc.ServiceRegistrar, svc service.ThreadService) {
 // This registers POST and OPTIONS handlers at [JSONRPCPath]. Use
 // [WithJSONRPCOptions] to forward options such as [jsonrpc.WithCORS] to the
 // underlying JSON-RPC handler.
-func RegisterHTTP(mux HTTPRegistrar, svc service.ThreadService, opts ...HTTPOption) {
+func RegisterHTTP(mux HTTPRegistrar, svc pb.ThreadServiceServer, opts ...HTTPOption) {
 	cfg := httpConfig{}
 	for _, opt := range opts {
 		if opt != nil {
