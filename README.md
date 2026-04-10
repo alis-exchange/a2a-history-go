@@ -109,11 +109,13 @@ historyService, err := service.NewThreadService(ctx, &service.SpannerStoreConfig
 In the managed infra layout, `prefix` must match the Terraform module naming rule:
 `${replace(var.ALIS_OS_PROJECT, "-", "_")}_${replace(var.neuron, "-", "_")}`.
 
-Register it on your gRPC server without importing the generated history proto package:
+Register it on your gRPC server from the root package:
 
 ```go
+import a2ahistory "go.alis.build/a2a/extension/history"
+
 grpcServer := grpc.NewServer()
-historyService.Register(grpcServer)
+a2ahistory.RegisterGRPC(grpcServer, historyService)
 ```
 
 If you are deploying through `alis/build/ge/agent/v2/infra`, register the history schema from `infra/main.tf` by including the module:
@@ -160,33 +162,33 @@ requestHandler := sdka2asrv.NewHandler(
 
 ### JSON-RPC handler (optional)
 
-Expose history reads over HTTP with [`jsonrpc.NewJSONRPCHandler`](jsonrpc/jsonrpc.go). The handler accepts optional functional options (`...jsonrpc.JSONRPCHandlerOption`). Mount it at [`jsonrpc.HistoryExtensionPath`](jsonrpc/jsonrpc.go) or any path your gateway uses. Wire format: JSON-RPC 2.0 with protobuf messages in `params` / `result` via **protojson**; service errors that are gRPC statuses are translated to JSON-RPC errors (see [`jsonrpc/errors.go`](jsonrpc/errors.go) for codes such as [`ErrNotFound`](jsonrpc/errors.go), [`ErrInvalidParams`](jsonrpc/errors.go)).
+Expose history reads over HTTP with the root package helper or, for custom routers, with [`jsonrpc.NewJSONRPCHandler`](jsonrpc/jsonrpc.go). The wire format is JSON-RPC 2.0 with protobuf messages in `params` / `result` via **protojson**; service errors that are gRPC statuses are translated to JSON-RPC errors (see [`jsonrpc/errors.go`](jsonrpc/errors.go) for codes such as [`ErrNotFound`](jsonrpc/errors.go), [`ErrInvalidParams`](jsonrpc/errors.go)).
 
-Same-origin or non-browser clients (no CORS):
+If you use a method-aware mux such as Go 1.22+ `http.ServeMux`, the root package can mount the standard history endpoint for you:
+
+```go
+import a2ahistory "go.alis.build/a2a/extension/history"
+
+a2ahistory.RegisterHTTP(mux, historyService)
+```
+
+Browser clients crossing origins need CORS on the JSON-RPC responses and an OPTIONS preflight. Forward JSON-RPC options through the root helper:
+
+```go
+import (
+	a2ahistory "go.alis.build/a2a/extension/history"
+	historyjsonrpc "go.alis.build/a2a/extension/history/jsonrpc"
+)
+
+a2ahistory.RegisterHTTP(mux, historyService, a2ahistory.WithJSONRPCOptions(historyjsonrpc.WithCORS()))
+```
+
+For routers that do not support Go 1.22 method-aware patterns, mount [`jsonrpc.NewJSONRPCHandler`](jsonrpc/jsonrpc.go) directly at [`jsonrpc.HistoryExtensionPath`](jsonrpc/jsonrpc.go) or any path your gateway uses:
 
 ```go
 import "go.alis.build/a2a/extension/history/jsonrpc"
 
 mux.Handle(jsonrpc.HistoryExtensionPath, jsonrpc.NewJSONRPCHandler(historyService))
-```
-
-If you use a method-aware mux such as Go 1.22+ `http.ServeMux`, you can let the package mount the
-history endpoint for you:
-
-```go
-jsonrpc.Register(mux, historyService)
-```
-
-Browser clients crossing origins need CORS on the JSON-RPC responses and an OPTIONS preflight. Pass [`jsonrpc.WithCORS`](jsonrpc/cors.go) (defaults: `Access-Control-Allow-Origin: *`, `POST` and `OPTIONS`, and common `Content-Type` / `Authorization` / Alis `X-Alis-*` headers):
-
-```go
-mux.Handle(jsonrpc.HistoryExtensionPath, jsonrpc.NewJSONRPCHandler(historyService, jsonrpc.WithCORS()))
-```
-
-With a method-aware mux, the helper can register the same endpoint with CORS enabled:
-
-```go
-jsonrpc.Register(mux, historyService, jsonrpc.WithCORS())
 ```
 
 Override origin or allowed headers/methods with [`jsonrpc.CORSAllowOrigin`](jsonrpc/cors.go), [`jsonrpc.CORSAllowHeaders`](jsonrpc/cors.go), and [`jsonrpc.CORSAllowMethods`](jsonrpc/cors.go):
