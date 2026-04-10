@@ -1,9 +1,4 @@
-// Package jsonrpc exposes the history API over HTTP as JSON-RPC 2.0, backed by the built-in
-// history [service.ThreadService].
-//
-// In the ge/agent/v2/infra layout, this handler normally runs inside the Cloud Run agent service
-// defined in infra/cloudrun.tf, while the required storage tables come from
-// infra/modules/alis.a2a.extension.history.v1.
+// Package jsonrpc exposes the history API over HTTP as JSON-RPC 2.0.
 //
 // [NewJSONRPCHandler] handles GetThread, ListThreads, and ListThreadEvents over HTTP POST.
 // Optional [WithCORS] enables browser cross-origin access. Params and results use protojson
@@ -20,4 +15,6 @@
 // Errors are encoded as [JSONRPCError]; when the service returns a gRPC status, standard codes such as
 // InvalidArgument and NotFound map to JSON-RPC error codes in the -326xx and -320xx ranges.
 // Mount the handler at [HistoryExtensionPath] (or a path your gateway uses consistently).
+//
+// The primary entry points are [Register] and [NewJSONRPCHandler].
 package jsonrpc

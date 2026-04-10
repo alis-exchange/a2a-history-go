@@ -19,8 +19,8 @@ type HTTPRegistrar interface {
 	Handle(pattern string, handler http.Handler)
 }
 
-// Register mounts the history JSON-RPC handler at [HistoryExtensionPath] for POST requests and
-// OPTIONS preflight requests on method-aware muxes. For routers without method-pattern support,
+// Register mounts the history JSON-RPC handler at [HistoryExtensionPath] for POST requests
+// and OPTIONS preflight requests on method-aware muxes. For routers without method-pattern support,
 // create the handler directly via [NewJSONRPCHandler] and mount it according to that router's API.
 func Register(mux HTTPRegistrar, service service.ThreadService, opts ...JSONRPCHandlerOption) {
 	handler := NewJSONRPCHandler(service, opts...)
