@@ -12,7 +12,7 @@ import (
 	"cloud.google.com/go/spanner"
 	"github.com/google/uuid"
 	pb "go.alis.build/common/alis/a2a/extension/history/v1"
-	"go.alis.build/iam/v2"
+	"go.alis.build/iam/v3"
 	"go.alis.build/validation"
 	"google.golang.org/genai"
 	"google.golang.org/grpc/codes"
@@ -126,7 +126,7 @@ func NewThreadService(ctx context.Context, config *SpannerStoreConfig) (*ThreadS
 // GetThread implements the [ThreadService.GetThread] method.
 func (s *ThreadService) GetThread(ctx context.Context, req *pb.GetThreadRequest) (*pb.Thread, error) {
 	// Authorize
-	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
+	az, err := s.authorizer.NewAuthorizer(ctx, pb.ThreadService_GetThread_FullMethodName)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
 	}
@@ -146,7 +146,7 @@ func (s *ThreadService) GetThread(ctx context.Context, req *pb.GetThreadRequest)
 
 	// Check if the requester has access to this resource
 	az.AddPolicy(policy)
-	if !az.HasAccess(pb.ThreadService_GetThread_FullMethodName) {
+	if !az.HasAccess() {
 		return nil, status.Errorf(codes.PermissionDenied, "you do not have permission to access this resource")
 	}
 
@@ -163,7 +163,7 @@ func (s *ThreadService) DeleteThread(ctx context.Context, req *pb.DeleteThreadRe
 	}
 
 	// Authorize
-	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
+	az, err := s.authorizer.NewAuthorizer(ctx, pb.ThreadService_DeleteThread_FullMethodName)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
 	}
@@ -174,7 +174,7 @@ func (s *ThreadService) DeleteThread(ctx context.Context, req *pb.DeleteThreadRe
 	}
 
 	az.AddPolicy(policy)
-	if err := az.AuthorizeRpc(); err != nil {
+	if err := az.Require(); err != nil {
 		return nil, err
 	}
 
@@ -213,18 +213,18 @@ func (s *ThreadService) DeleteThread(ctx context.Context, req *pb.DeleteThreadRe
 // state onto returned thread views.
 func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequest) (*pb.ListThreadsResponse, error) {
 	// Authorize
-	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
+	az, err := s.authorizer.NewAuthorizer(ctx, pb.ThreadService_ListThreads_FullMethodName)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
 	}
 
-	if err = az.AuthorizeRpc(); err != nil {
+	if err = az.Require(); err != nil {
 		return nil, err
 	}
 
 	// Prepare query statement
 	statement := spanner.NewStatement(`select Thread, Policy from ` + s.historyTbl + " as t")
-	if !az.Identity.IsDeploymentServiceAccount() {
+	if !az.Caller().IsDeploymentServiceAccount() {
 		statement.SQL += `
 			WHERE EXISTS (
 			SELECT 1
@@ -232,7 +232,7 @@ func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequ
 			CROSS JOIN UNNEST(binding.members) AS member
 			WHERE member = @member
 			)`
-		statement.Params["member"] = az.Identity.PolicyMember()
+		statement.Params["member"] = az.Caller().PolicyMember()
 	}
 	statement.SQL += ` order by t.create_time DESC limit @limit offset @offset;`
 
@@ -265,7 +265,7 @@ func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequ
 		return nil, status.Errorf(codes.Internal, "querying database: %v", err)
 	}
 
-	userStates, err := s.readUserThreadStates(ctx, currentUserResource(az.Identity), threads)
+	userStates, err := s.readUserThreadStates(ctx, currentUserResource(az.Caller()), threads)
 	if err != nil {
 		return nil, err
 	}
@@ -299,11 +299,11 @@ func (s *ThreadService) ListThreads(ctx context.Context, req *pb.ListThreadsRequ
 
 // GetUserThreadState implements the [ThreadService.GetUserThreadState] method.
 func (s *ThreadService) GetUserThreadState(ctx context.Context, req *pb.GetUserThreadStateRequest) (*pb.UserThreadState, error) {
-	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
+	az, err := s.authorizer.NewAuthorizer(ctx, pb.ThreadService_GetUserThreadState_FullMethodName)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
 	}
-	if err = az.AuthorizeRpc(); err != nil {
+	if err = az.Require(); err != nil {
 		return nil, err
 	}
 
@@ -311,7 +311,7 @@ func (s *ThreadService) GetUserThreadState(ctx context.Context, req *pb.GetUserT
 	if err != nil {
 		return nil, err
 	}
-	userResource, err := requireCurrentUserResource(az.Identity)
+	userResource, err := requireCurrentUserResource(az.Caller())
 	if err != nil {
 		return nil, err
 	}
@@ -323,8 +323,12 @@ func (s *ThreadService) GetUserThreadState(ctx context.Context, req *pb.GetUserT
 	if err != nil {
 		return nil, err
 	}
-	az.AddPolicy(policy)
-	if !az.HasAccess(pb.ThreadService_ListThreads_FullMethodName) {
+	threadAz, err := s.authorizer.NewAuthorizer(ctx, pb.ThreadService_ListThreads_FullMethodName)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
+	}
+	threadAz.AddPolicy(policy)
+	if !threadAz.HasAccess() {
 		return nil, status.Error(codes.PermissionDenied, "you do not have permission to access this thread")
 	}
 
@@ -343,15 +347,15 @@ func (s *ThreadService) UpdateUserThreadState(ctx context.Context, req *pb.Updat
 		return nil, err
 	}
 
-	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
+	az, err := s.authorizer.NewAuthorizer(ctx, pb.ThreadService_UpdateUserThreadState_FullMethodName)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
 	}
-	if err = az.AuthorizeRpc(); err != nil {
+	if err = az.Require(); err != nil {
 		return nil, err
 	}
 
-	userResource, err := requireCurrentUserResource(az.Identity)
+	userResource, err := requireCurrentUserResource(az.Caller())
 	if err != nil {
 		return nil, err
 	}
@@ -385,8 +389,12 @@ func (s *ThreadService) UpdateUserThreadState(ctx context.Context, req *pb.Updat
 	if err != nil {
 		return nil, err
 	}
-	az.AddPolicy(policy)
-	if !az.HasAccess(pb.ThreadService_ListThreads_FullMethodName) {
+	threadAz, err := s.authorizer.NewAuthorizer(ctx, pb.ThreadService_ListThreads_FullMethodName)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create authorizer: %s", err.Error())
+	}
+	threadAz.AddPolicy(policy)
+	if !threadAz.HasAccess() {
 		return nil, status.Error(codes.PermissionDenied, "you do not have permission to access this thread")
 	}
 
@@ -458,7 +466,7 @@ func (s *ThreadService) ListThreadEvents(ctx context.Context, req *pb.ListThread
 	}
 
 	// Authorize
-	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
+	az, err := s.authorizer.NewAuthorizer(ctx, pb.ThreadService_ListThreadEvents_FullMethodName)
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +475,7 @@ func (s *ThreadService) ListThreadEvents(ctx context.Context, req *pb.ListThread
 		return nil, err
 	}
 	az.AddPolicy(policy)
-	if err := az.AuthorizeRpc(); err != nil {
+	if err := az.Require(); err != nil {
 		return nil, err
 	}
 
@@ -526,11 +534,11 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 	}
 
 	// Authorize
-	az, ctx, err := s.authorizer.NewAuthorizer(ctx)
+	az, err := s.authorizer.NewAuthorizer(ctx, pb.ThreadService_AppendThreadEvent_FullMethodName)
 	if err != nil {
 		return nil, err
 	}
-	if err = az.AuthorizeRpc(); err != nil {
+	if err = az.Require(); err != nil {
 		return nil, err
 	}
 
@@ -583,7 +591,7 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 				Bindings: []*iampb.Binding{
 					{
 						Role:    roleThreadAdmin,
-						Members: []string{az.Identity.PolicyMember()},
+						Members: []string{az.Caller().PolicyMember()},
 					},
 				},
 			}
@@ -709,8 +717,8 @@ func currentUserResource(identity *iam.Identity) string {
 	if identity == nil || identity.IsDeploymentServiceAccount() {
 		return ""
 	}
-	if identity.Id() != "" {
-		return "users/" + identity.Id()
+	if identity.ID() != "" {
+		return "users/" + identity.ID()
 	}
 	return ""
 }
