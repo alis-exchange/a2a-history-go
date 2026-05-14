@@ -530,7 +530,7 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 		row, err := rwt.ReadRow(ctx, s.historyTbl, spanner.Key{historyName}, []string{"Thread", "Policy"})
 		if err != nil {
 			if spanner.ErrCode(err) != codes.NotFound {
-				return status.Errorf(codes.Internal, "reading thread %q: %v", historyName, err)
+				return err 
 			}
 			threadExists = false
 			thread = &pb.Thread{
@@ -550,7 +550,7 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 				},
 			}
 		} else if err := row.Columns(thread, policy); err != nil {
-			return status.Errorf(codes.Internal, "decoding thread %q: %v", historyName, err)
+			return err
 		}
 
 		sequence := thread.GetNextSequence()
@@ -569,12 +569,9 @@ func (s *ThreadService) AppendThreadEvent(ctx context.Context, req *pb.AppendThr
 		} else {
 			mutations = append(mutations, spanner.Insert(s.historyTbl, []string{"key", "Thread", "Policy"}, []any{thread.GetName(), thread, policy}))
 		}
-		if err := rwt.BufferWrite(mutations); err != nil {
-			return status.Errorf(codes.Internal, "writing thread/event mutations: %v", err)
-		}
-		return nil
+		return rwt.BufferWrite(mutations)
 	}); err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Internal, "transaction failed for thread %q: %v", historyName, err)
 	}
 
 	return &pb.AppendThreadEventResponse{}, nil
